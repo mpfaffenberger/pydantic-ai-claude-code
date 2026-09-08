@@ -67,6 +67,32 @@ Tools defined on the agent are passed to the API as standard Anthropic tool
 definitions, and structured output works the same way as with the built-in
 `anthropic` provider. That's the whole point of the wheel.
 
+### Structured output
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+class Weather(BaseModel):
+    city: str
+    temperature_c: float
+
+agent = Agent(ClaudeCodeProvider().model('claude-fable-5-1'), output_type=Weather)
+result = await agent.run('Weather in Paris right now?')
+assert result.output.city == 'Paris'
+```
+
+### Streaming
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent(ClaudeCodeProvider().model('claude-fable-5-1'))
+async with agent.run_stream('Count from 1 to 3.') as stream:
+    async for chunk in stream.stream_text():
+        print(chunk, end='', flush=True)
+```
+
 ## How auth works
 
 The flow uses the same shared OAuth client the Claude Code CLI uses:
