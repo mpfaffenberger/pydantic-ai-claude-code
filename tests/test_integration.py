@@ -54,16 +54,17 @@ def messages_stub(monkeypatch) -> ThreadingHTTPServer:
     server.server_close()
 
 
-def test_agent_round_trip(messages_stub) -> None:
+@pytest.mark.parametrize("model_name", ["claude-sonnet-4-5", "claude-fable-5-1"])
+def test_agent_round_trip(messages_stub, model_name: str) -> None:
     creds = ClaudeCodeCredentials(access_token="sub-token", refresh_token="refresh")
     provider = ClaudeCodeProvider(credentials=creds, base_url=f"http://127.0.0.1:{messages_stub.server_address[1]}")
-    agent = Agent(provider.model("claude-sonnet-4-5"))
+    agent = Agent(provider.model(model_name))
 
     result = asyncio_run(agent.run("Say hi."))
 
     assert result.output == "Hello from the stub!"
     body = messages_stub.received
-    assert body["model"] == "claude-sonnet-4-5"
+    assert body["model"] == model_name
     assert body["messages"][0]["content"][0]["text"] == "Say hi."
 
 
