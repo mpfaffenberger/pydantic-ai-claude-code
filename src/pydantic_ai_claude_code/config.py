@@ -23,6 +23,11 @@ SCOPES = "org:create_api_key user:profile user:inference"
 # The subscription tokens minted by this flow are valid against api.anthropic.com.
 API_BASE_URL = "https://api.anthropic.com"
 
+# Must open the system context when authenticating with Claude Code tokens. This
+# is the exact persona string the official CLI sends; the subscription backend
+# expects it at position 0.
+CLAUDE_CODE_SYSTEM_PROMPT = "You are Claude Code, Anthropic's official CLI for Claude."
+
 # Redirect handling. We host a short-lived callback server on localhost. The
 # authorization server accepts `http://localhost:<any port>/callback` but
 # rejects `127.0.0.1` variants, so the host must stay `localhost`.

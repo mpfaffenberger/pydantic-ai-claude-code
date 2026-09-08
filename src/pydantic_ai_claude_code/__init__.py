@@ -17,11 +17,13 @@ from .flow import (
     parse_pasteback,
     refresh_credentials,
 )
+from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
 from .storage import ClaudeCodeTokenStore, default_auth_path
 
 __all__ = [
     "ClaudeCodeCredentials",
+    "ClaudeCodeModel",
     "ClaudeCodeOAuthFlow",
     "ClaudeCodeProvider",
     "ClaudeCodeTokenStore",

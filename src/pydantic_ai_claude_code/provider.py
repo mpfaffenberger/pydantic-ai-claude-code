@@ -9,10 +9,10 @@ import httpx2
 from anthropic import AsyncAnthropic
 
 from pydantic_ai.exceptions import UserError
-from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from . import config
+from .model import ClaudeCodeModel
 from .auth import _ClaudeCodeAuth
 from .credentials import ClaudeCodeCredentials
 from .storage import ClaudeCodeTokenStore
@@ -85,13 +85,14 @@ class ClaudeCodeProvider(AnthropicProvider):
         """The current credentials; refreshed in place by the auth shim."""
         return self._claude_code_auth.credentials
 
-    def model(self, model_name: str) -> AnthropicModel:
-        """Build an `AnthropicModel` bound to this provider.
+    def model(self, model_name: str) -> ClaudeCodeModel:
+        """Build a `ClaudeCodeModel` bound to this provider.
 
         This is the object-only entry point agreed for the wheel: pass its result
-        to `Agent(model=...)` without modifying pydantic-ai.
+        to `Agent(model=...)` without modifying pydantic-ai. The persona is
+        prepended to the system context automatically.
         """
-        return AnthropicModel(model_name, provider=self)
+        return ClaudeCodeModel(model_name, provider=self)
 
     @classmethod
     def from_token_store(

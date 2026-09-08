@@ -66,6 +66,10 @@ def test_agent_round_trip(messages_stub, model_name: str) -> None:
     body = messages_stub.received
     assert body["model"] == model_name
     assert body["messages"][0]["content"][0]["text"] == "Say hi."
+    # The Claude Code persona must open the system context, before any user prompt.
+    system = body.get("system")
+    assert system is not None
+    assert "You are Claude Code" in str(system)
 
 
 import asyncio  # noqa: E402

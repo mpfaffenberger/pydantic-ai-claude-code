@@ -87,6 +87,11 @@ issuer gave us. We never read the CLI's own credential files.
 Refreshes happen automatically in the background: the auth shim refreshes
 before expiry and retries once on a 401, exactly like the codex provider does.
 
+Requests identify as Claude Code: `"You are Claude Code, Anthropic's official
+CLI for Claude."` is prepended to the system context (position 0), the same
+persona the CLI sends. The subscription backend expects it and rate-gates
+premium models without it.
+
 ## Security and scope
 
 This is a plain Anthropic Messages API client authenticated by your Claude
