@@ -8,6 +8,7 @@ import httpx2
 from pydantic_ai.exceptions import UserError
 
 from pydantic_ai_claude_code.credentials import ClaudeCodeCredentials
+from pydantic_ai_claude_code.model import ClaudeCodeModel
 from pydantic_ai_claude_code.provider import ClaudeCodeProvider
 from pydantic_ai_claude_code.storage import ClaudeCodeTokenStore
 
@@ -23,11 +24,19 @@ def test_credentials_property() -> None:
     assert provider.credentials.token == "a"
 
 
-def test_model_binding() -> None:
+def test_model_binds_explicit_provider() -> None:
     provider = ClaudeCodeProvider(credentials=ClaudeCodeCredentials(access_token="a", refresh_token="b"))
-    model = provider.model("claude-sonnet-4-5")
+    model = ClaudeCodeModel("claude-sonnet-4-5", provider=provider)
     assert model.model_name == "claude-sonnet-4-5"
     assert model._provider is provider  # type: ignore[attr-defined]
+
+
+def test_model_defaults_provider(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_CREDENTIALS", "file")
+    monkeypatch.setenv("CLAUDE_CODE_AUTH_FILE", str(tmp_path / "auth.json"))
+    ClaudeCodeTokenStore().save(ClaudeCodeCredentials(access_token="a", refresh_token="b"))
+    model = ClaudeCodeModel("claude-sonnet-4-5")
+    assert isinstance(model._provider, ClaudeCodeProvider)  # type: ignore[attr-defined]
 
 
 def test_missing_credentials_raises(tmp_path) -> None:

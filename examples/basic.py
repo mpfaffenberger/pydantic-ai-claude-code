@@ -11,7 +11,7 @@ import asyncio
 
 from pydantic_ai import Agent
 
-from pydantic_ai_claude_code import ClaudeCodeProvider, default_store, login
+from pydantic_ai_claude_code import ClaudeCodeModel, default_store, login
 
 
 async def main() -> None:
@@ -19,8 +19,7 @@ async def main() -> None:
     if default_store().load() is None:
         await login()
 
-    provider = ClaudeCodeProvider()
-    agent = Agent(provider.model("claude-fable-5-1"))
+    agent = Agent(ClaudeCodeModel("claude-fable-5-1"))
 
     result = await agent.run("Say hi in exactly three words.")
     print("Agent said:", result.output)

@@ -12,7 +12,6 @@ from pydantic_ai.exceptions import UserError
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from . import config
-from .model import ClaudeCodeModel
 from .auth import _ClaudeCodeAuth
 from .credentials import ClaudeCodeCredentials
 from .storage import TokenStore, default_store
@@ -84,15 +83,6 @@ class ClaudeCodeProvider(AnthropicProvider):
     def credentials(self) -> ClaudeCodeCredentials:
         """The current credentials; refreshed in place by the auth shim."""
         return self._claude_code_auth.credentials
-
-    def model(self, model_name: str) -> ClaudeCodeModel:
-        """Build a `ClaudeCodeModel` bound to this provider.
-
-        This is the object-only entry point agreed for the wheel: pass its result
-        to `Agent(model=...)` without modifying pydantic-ai. The persona is
-        prepended to the system context automatically.
-        """
-        return ClaudeCodeModel(model_name, provider=self)
 
     @classmethod
     def from_token_store(

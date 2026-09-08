@@ -16,6 +16,7 @@ import pytest
 from pydantic_ai import Agent
 
 from pydantic_ai_claude_code.credentials import ClaudeCodeCredentials
+from pydantic_ai_claude_code.model import ClaudeCodeModel
 from pydantic_ai_claude_code.provider import ClaudeCodeProvider
 
 
@@ -58,7 +59,7 @@ def messages_stub(monkeypatch) -> ThreadingHTTPServer:
 def test_agent_round_trip(messages_stub, model_name: str) -> None:
     creds = ClaudeCodeCredentials(access_token="sub-token", refresh_token="refresh")
     provider = ClaudeCodeProvider(credentials=creds, base_url=f"http://127.0.0.1:{messages_stub.server_address[1]}")
-    agent = Agent(provider.model(model_name))
+    agent = Agent(ClaudeCodeModel(model_name, provider=provider))
 
     result = asyncio_run(agent.run("Say hi."))
 

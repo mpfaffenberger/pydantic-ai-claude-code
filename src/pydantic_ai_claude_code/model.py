@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers import Provider
 
 from . import config
 
@@ -16,6 +19,26 @@ class ClaudeCodeModel(AnthropicModel):
     once it's in history it stays, and repeated `prepare_messages` calls don't
     duplicate it.
     """
+
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        provider: Provider[Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize a Claude Code model.
+
+        Args:
+            model_name: The model name to use, e.g. `'claude-fable-5-1'`.
+            provider: The provider to authenticate with. Defaults to a
+                `ClaudeCodeProvider` backed by the default token store.
+        """
+        if provider is None:
+            from .provider import ClaudeCodeProvider
+
+            provider = ClaudeCodeProvider()
+        super().__init__(model_name, provider=provider, **kwargs)
 
     def prepare_messages(
         self,

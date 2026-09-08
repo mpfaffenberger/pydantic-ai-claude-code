@@ -23,8 +23,9 @@ Two deliberate design choices distinguish this from a fork of pydantic-ai:
    executes your tools, and validates structured output. The wheel is a model
    + provider, not a second agent fighting for control.
 2. **Object-only resolution.** Instead of a `claude-code:` model-name string
-   (which would require patching pydantic-ai's internals), pass the model
-   object you build from the provider.
+   (which would require patching pydantic-ai's internals), construct a
+   `ClaudeCodeModel('claude-fable-5-1')` directly; it wires itself up to a
+   `ClaudeCodeProvider` by default.
 
 ## Quick start
 
@@ -33,15 +34,14 @@ import asyncio
 
 from pydantic_ai import Agent
 
-from pydantic_ai_claude_code import ClaudeCodeProvider, login
+from pydantic_ai_claude_code import ClaudeCodeModel, login
 
 async def main() -> None:
     # One-time: opens your browser, mints tokens, stores them
     # (only needs to run again when tokens are revoked).
     await login()
 
-    provider = ClaudeCodeProvider()  # loads the stored tokens
-    agent = Agent(provider.model('claude-fable-5-1'))
+    agent = Agent(ClaudeCodeModel('claude-fable-5-1'))
 
     result = await agent.run('Say hi in three words.')
     print(result.data)
@@ -53,9 +53,9 @@ asyncio.run(main())
 
 ```python
 from pydantic_ai import Agent
+from pydantic_ai_claude_code import ClaudeCodeModel
 
-provider = ClaudeCodeProvider()
-agent = Agent(provider.model('claude-fable-5-1'))
+agent = Agent(ClaudeCodeModel('claude-fable-5-1'))
 
 @agent.tool_plain
 def add(a: int, b: int) -> int:
@@ -72,12 +72,13 @@ definitions, and structured output works the same way as with the built-in
 ```python
 from pydantic import BaseModel
 from pydantic_ai import Agent
+from pydantic_ai_claude_code import ClaudeCodeModel
 
 class Weather(BaseModel):
     city: str
     temperature_c: float
 
-agent = Agent(ClaudeCodeProvider().model('claude-fable-5-1'), output_type=Weather)
+agent = Agent(ClaudeCodeModel('claude-fable-5-1'), output_type=Weather)
 result = await agent.run('Weather in Paris right now?')
 assert result.output.city == 'Paris'
 ```
@@ -86,8 +87,9 @@ assert result.output.city == 'Paris'
 
 ```python
 from pydantic_ai import Agent
+from pydantic_ai_claude_code import ClaudeCodeModel
 
-agent = Agent(ClaudeCodeProvider().model('claude-fable-5-1'))
+agent = Agent(ClaudeCodeModel('claude-fable-5-1'))
 async with agent.run_stream('Count from 1 to 3.') as stream:
     async for chunk in stream.stream_text():
         print(chunk, end='', flush=True)

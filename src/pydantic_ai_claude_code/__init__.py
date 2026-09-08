@@ -3,10 +3,9 @@
 Quick start:
 
     from pydantic_ai import Agent
-    from pydantic_ai_claude_code import ClaudeCodeProvider
+    from pydantic_ai_claude_code import ClaudeCodeModel
 
-    provider = ClaudeCodeProvider()
-    agent = Agent(provider.model('claude-fable-5-1'))
+    agent = Agent(ClaudeCodeModel('claude-fable-5-1'))
 """
 
 from .credentials import ClaudeCodeCredentials
