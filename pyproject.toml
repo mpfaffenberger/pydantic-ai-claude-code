@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pydantic-ai-claude-code"
+version = "0.1.0"
+description = "Use your Claude Code subscription from a Pydantic AI Agent, with full tool support"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "pydantic-ai-slim[anthropic]>=2.31.0,<3",
+]
+license = { text = "MIT" }
+authors = [{ name = "Michael Pfaffenberger" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/mpfaffenberger/pydantic-ai-claude-code"
+Homepage = "https://github.com/mpfaffenberger/pydantic-ai-claude-code"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pydantic_ai_claude_code"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.23.1",
+    "ruff>=0.15,<0.16",
+]
