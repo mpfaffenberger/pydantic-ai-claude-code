@@ -184,10 +184,10 @@ async def login(*, store: Any = None) -> ClaudeCodeCredentials:
     Returns:
         The credentials that were persisted.
     """
-    from .storage import ClaudeCodeTokenStore
+    from .storage import default_store
 
     if store is None:
-        store = ClaudeCodeTokenStore()
+        store = default_store()
     server = start_login_callback_server()
     try:
         redirect_uri = f"{config.REDIRECT_HOST}:{server.server_address[1]}/{config.REDIRECT_PATH}"

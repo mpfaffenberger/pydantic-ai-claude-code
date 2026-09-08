@@ -15,7 +15,7 @@ from . import config
 from .model import ClaudeCodeModel
 from .auth import _ClaudeCodeAuth
 from .credentials import ClaudeCodeCredentials
-from .storage import ClaudeCodeTokenStore
+from .storage import TokenStore, default_store
 
 
 class ClaudeCodeProvider(AnthropicProvider):
@@ -34,7 +34,7 @@ class ClaudeCodeProvider(AnthropicProvider):
         self,
         credentials: ClaudeCodeCredentials | None = None,
         *,
-        store: ClaudeCodeTokenStore | None = None,
+        store: TokenStore | None = None,
         on_credentials_refresh: Any = None,
         http_client: httpx2.AsyncClient | None = None,
         base_url: str | None = None,
@@ -43,7 +43,7 @@ class ClaudeCodeProvider(AnthropicProvider):
 
         Args:
             credentials: Credentials to use. When omitted, they are loaded from
-                the store (which defaults to the standard token file).
+                the store (which defaults to the OS keyring, falling back to a file).
             store: Token store used to persist refreshed credentials. When
                 credentials are loaded from the store, refreshes are persisted
                 back to it automatically.
@@ -54,7 +54,7 @@ class ClaudeCodeProvider(AnthropicProvider):
         """
         if credentials is None:
             if store is None:
-                store = ClaudeCodeTokenStore()
+                store = default_store()
             creds = store.load()
             if creds is None:
                 raise UserError(
@@ -98,9 +98,9 @@ class ClaudeCodeProvider(AnthropicProvider):
     def from_token_store(
         cls,
         *,
-        store: ClaudeCodeTokenStore | None = None,
+        store: TokenStore | None = None,
         http_client: httpx2.AsyncClient | None = None,
         base_url: str | None = None,
     ) -> "ClaudeCodeProvider":
-        """Build a provider from the stored token file."""
+        """Build a provider from the default store."""
         return cls(store=store, http_client=http_client, base_url=base_url)

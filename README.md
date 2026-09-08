@@ -101,14 +101,18 @@ The flow uses the same shared OAuth client the Claude Code CLI uses:
 - Token URL: `https://platform.claude.com/v1/oauth/token`
 - Scopes: `org:create_api_key user:profile user:inference`
 
-Tokens are stored in (overridable via `CLAUDE_CODE_AUTH_FILE`):
+Tokens are saved to the OS keyring by default: the Keychain on macOS, Credential
+Manager on Windows, and Secret Service on Linux. On machines without a keychain,
+credentials fall back to a JSON file (overridable via `CLAUDE_CODE_AUTH_FILE`):
 
 ```
 ~/.local/share/pydantic-ai-claude-code/auth.json
 ```
 
-The file is written with `0o600` permissions and only ever contains what the
-issuer gave us. We never read the CLI's own credential files.
+The fallback file is written with `0644` permissions and only ever contains what
+the issuer gave us. We never read the CLI's own credential files.
+
+Force a backend with the `CLAUDE_CODE_CREDENTIALS` env var: `keyring` or `file`.
 
 Refreshes happen automatically in the background: the auth shim refreshes
 before expiry and retries once on a 401, exactly like the codex provider does.

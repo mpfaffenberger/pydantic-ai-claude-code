@@ -11,12 +11,12 @@ import asyncio
 
 from pydantic_ai import Agent
 
-from pydantic_ai_claude_code import ClaudeCodeProvider, ClaudeCodeTokenStore, login
+from pydantic_ai_claude_code import ClaudeCodeProvider, default_store, login
 
 
 async def main() -> None:
     # Only run the browser flow when no usable credentials are stored yet.
-    if ClaudeCodeTokenStore().load() is None:
+    if default_store().load() is None:
         await login()
 
     provider = ClaudeCodeProvider()

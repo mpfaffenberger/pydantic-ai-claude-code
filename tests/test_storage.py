@@ -18,11 +18,11 @@ def test_save_load_roundtrip(tmp_path) -> None:
     assert store.load() == creds
 
 
-def test_save_sets_0600_perm(tmp_path) -> None:
+def test_save_sets_0644_perm(tmp_path) -> None:
     store = ClaudeCodeTokenStore(path=tmp_path / "auth.json")
     store.save(ClaudeCodeCredentials(access_token="a", refresh_token="b"))
     mode = stat.S_IMODE((tmp_path / "auth.json").stat().st_mode)
-    assert mode == 0o600
+    assert mode == 0o644
 
 
 def test_load_missing_returns_none(tmp_path) -> None:

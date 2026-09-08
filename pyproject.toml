@@ -4,11 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pydantic-claude-code"
-version = "0.1.1"
+version = "0.2.0"
 description = "Use your Claude Code subscription from a Pydantic AI Agent, with full tool support"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 dependencies = [
+    "keyring>=23,<26",
     "pydantic-ai-slim[anthropic]>=2.31.0,<3",
 ]
 license = { text = "MIT" }

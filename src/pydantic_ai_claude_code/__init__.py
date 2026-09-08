@@ -19,7 +19,7 @@ from .flow import (
 )
 from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
-from .storage import ClaudeCodeTokenStore, default_auth_path
+from .storage import ClaudeCodeTokenStore, KeyringTokenStore, default_auth_path, default_store
 
 __all__ = [
     "ClaudeCodeCredentials",
@@ -27,7 +27,9 @@ __all__ = [
     "ClaudeCodeOAuthFlow",
     "ClaudeCodeProvider",
     "ClaudeCodeTokenStore",
+    "KeyringTokenStore",
     "default_auth_path",
+    "default_store",
     "exchange_code",
     "login",
     "parse_pasteback",
