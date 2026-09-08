@@ -51,7 +51,9 @@ class ClaudeCodeOAuthFlow:
 
     async def exchange_code(self, code: str, *, http_client: httpx2.AsyncClient | None = None) -> ClaudeCodeCredentials:
         """Exchange an authorization code for credentials."""
-        return await exchange_code(code, self.code_verifier, self.redirect_uri, http_client=http_client)
+        return await exchange_code(
+            code, self.code_verifier, self.redirect_uri, state=self.state, http_client=http_client
+        )
 
 
 async def exchange_code(
@@ -59,22 +61,24 @@ async def exchange_code(
     code_verifier: str,
     redirect_uri: str | None,
     *,
+    state: str | None = None,
     http_client: httpx2.AsyncClient | None = None,
 ) -> ClaudeCodeCredentials:
     """Exchange an authorization code for Claude Code credentials."""
     async with _client_context(http_client) as client:
         response = await client.post(
             config.TOKEN_URL,
-            data={
+            json={
                 "grant_type": "authorization_code",
                 "client_id": config.CLIENT_ID,
                 "code": code,
                 "redirect_uri": redirect_uri,
                 "code_verifier": code_verifier,
+                "state": state,
             },
-            headers={"anthropic-beta": config.ANTHROPIC_BETA},
+            headers=_token_headers(),
         )
-        response.raise_for_status()
+        _raise_for_token_error(response)
         return ClaudeCodeCredentials.from_token_response(response.json())
 
 
@@ -85,15 +89,36 @@ async def refresh_credentials(
     async with _client_context(http_client) as client:
         response = await client.post(
             config.TOKEN_URL,
-            data={
+            json={
                 "grant_type": "refresh_token",
                 "client_id": config.CLIENT_ID,
                 "refresh_token": credentials.refresh_token.get_secret_value(),
             },
-            headers={"anthropic-beta": config.ANTHROPIC_BETA},
+            headers=_token_headers(),
         )
-        response.raise_for_status()
+        _raise_for_token_error(response)
         return ClaudeCodeCredentials.from_token_response(response.json(), previous=credentials)
+
+
+def _raise_for_token_error(response: httpx2.Response) -> None:
+    """Raise a `UserError` that includes the token server's error body.
+
+    The token endpoints return sparse HTTP codes, so the reason lives in the
+    JSON body; without it a 400 tells us nothing.
+    """
+    if response.status_code < 400:
+        return
+    body = response.text[:500]
+    raise UserError(f"Claude Code token endpoint returned {response.status_code}: {body}")
+
+
+def _token_headers() -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "anthropic-beta": config.ANTHROPIC_BETA,
+        "User-Agent": config.USER_AGENT,
+    }
 
 
 def parse_pasteback(raw: str) -> tuple[str, str] | None:
@@ -169,10 +194,14 @@ async def login(*, store: Any = None) -> ClaudeCodeCredentials:
         flow = ClaudeCodeOAuthFlow(redirect_uri=redirect_uri)
         url = flow.authorization_url()
         print(f"Open this URL in your browser if it did not open automatically:\n{url}")
-        webbrowser.open(url)
+        # Launch the browser off the event path: on some macOS setups `webbrowser.open`
+        # hangs until the UI settles, which would starve the callback wait below.
+        threading.Thread(target=_open_browser, args=(url,), daemon=True).start()
         if not server.received.wait(config.CALLBACK_TIMEOUT):
             raise UserError("Claude Code OAuth callback timed out.")
-        code = parse_qs(server.query or "").get("code", [""])[0]
+        code, state = _parse_callback_query(server.query)
+        if state and state != flow.state:
+            raise UserError("Claude Code OAuth state mismatch; the redirect may be a replay.")
         if not code:
             raise UserError(f"Claude Code OAuth redirect did not include a `code` parameter: {server.query!r}")
         credentials = await flow.exchange_code(code)
@@ -181,6 +210,19 @@ async def login(*, store: Any = None) -> ClaudeCodeCredentials:
         server.server_close()
     store.save(credentials)
     return credentials
+
+
+def _open_browser(url: str) -> None:
+    try:
+        webbrowser.open(url)
+    except Exception:  # noqa: BLE001 - best-effort: the URL is printed for manual use
+        pass
+
+
+def _parse_callback_query(raw: str | None) -> tuple[str, str]:
+    """Extract `(code, state)` from a captured redirect path like `/callback?code=...`."""
+    params = parse_qs((raw or "").split("?", 1)[-1])
+    return params.get("code", [""])[0], params.get("state", [""])[0]
 
 
 class _client_context:

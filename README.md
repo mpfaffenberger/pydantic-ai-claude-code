@@ -72,7 +72,7 @@ definitions, and structured output works the same way as with the built-in
 The flow uses the same shared OAuth client the Claude Code CLI uses:
 
 - Authorization URL: `https://claude.ai/oauth/authorize`
-- Token URL: `https://console.anthropic.com/v1/oauth/token`
+- Token URL: `https://platform.claude.com/v1/oauth/token`
 - Scopes: `org:create_api_key user:profile user:inference`
 
 Tokens are stored in (overridable via `CLAUDE_CODE_AUTH_FILE`):

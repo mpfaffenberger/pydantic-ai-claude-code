@@ -1,20 +1,31 @@
 """OAuth endpoint and client configuration for Claude Code authentication.
 
-These values mirror the shared OAuth client the official Claude Code CLI uses. See
-`flow.py` for the authorization-code flow, and `provider.py` for the API client.
+These constants were verified against the Claude Code CLI 2.1.263 binary
+(embedded config) and its published client metadata:
+
+- `https://claude.ai/oauth/claude-code-client-metadata` (dynamic client registration)
+- Authorization server: `https://claude.com/cai/oauth/authorize`
+- Token endpoint: `https://platform.claude.com/v1/oauth/token`
+
+The shared `9d1c250a...` client id is the public client the official CLI uses,
+so our flow presents the same credentials to Anthropic's authorization server.
+See `flow.py` for the authorization-code flow, and `provider.py` for the API client.
 """
 
-# OAuth endpoints and shared client id used by the Claude Code CLI.
+# OAuth endpoints and the shared public client id used by the Claude Code CLI.
 AUTH_URL = "https://claude.ai/oauth/authorize"
-TOKEN_URL = "https://console.anthropic.com/v1/oauth/token"
+TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+# Same scope set the plugin in `code_puppy_core_plugins` uses. The binary's
+# `user:ccr_inference` scope is not recognized by the authorization server.
 SCOPES = "org:create_api_key user:profile user:inference"
 
 # The subscription tokens minted by this flow are valid against api.anthropic.com.
 API_BASE_URL = "https://api.anthropic.com"
 
-# Redirect handling. We host a short-lived callback server on localhost, and also
-# support pasting the `claude://oauth/callback?...` URL into the terminal.
+# Redirect handling. We host a short-lived callback server on localhost. The
+# authorization server accepts `http://localhost:<any port>/callback` but
+# rejects `127.0.0.1` variants, so the host must stay `localhost`.
 REDIRECT_HOST = "http://localhost"
 REDIRECT_PATH = "callback"
 CALLBACK_PORT_RANGE = (8765, 8795)

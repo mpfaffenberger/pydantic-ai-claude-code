@@ -43,10 +43,15 @@ def test_auth_applies_headers() -> None:
     )
     auth = provider._claude_code_auth  # type: ignore[attr-defined]
     request = httpx2.Request(
-        "POST", "https://api.anthropic.com/v1/messages", headers={"anthropic-beta": "thinking-2025"}
+        "POST",
+        "https://api.anthropic.com/v1/messages",
+        headers={"anthropic-beta": "thinking-2025", "x-api-key": "unused"},
     )
     auth._apply(request)
     assert request.headers["authorization"] == "Bearer secret-token"
+    # The SDK's placeholder API key must not reach the wire, or the server
+    # rejects it as an invalid API key before the bearer is considered.
+    assert "x-api-key" not in request.headers
     assert request.headers["x-app"] == "cli"
     assert "oauth-2025-04-20" in request.headers["anthropic-beta"]
     assert "thinking-2025" in request.headers["anthropic-beta"]

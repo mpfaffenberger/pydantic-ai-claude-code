@@ -53,6 +53,11 @@ class _ClaudeCodeAuth(httpx2.Auth):
                     ) from exc
 
     def _apply(self, request: httpx2.Request) -> int:
+        # Subscription tokens are `Authorization: Bearer` credentials, not API keys.
+        # The SDK injects `x-api-key` from the placeholder `api_key`, so it must be
+        # removed or the server validates it first and rejects it as an API key.
+        if "x-api-key" in request.headers:
+            del request.headers["x-api-key"]
         request.headers["Authorization"] = f"Bearer {self.credentials.token}"
         request.headers["x-app"] = config.X_APP
         request.headers["user-agent"] = config.USER_AGENT

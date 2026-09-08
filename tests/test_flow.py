@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx2
@@ -27,7 +26,7 @@ class _StubTokenServer(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode()
-        self.server.last_body = dict(urllib.parse.parse_qsl(body))
+        self.server.last_body = json.loads(body)
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -59,12 +58,19 @@ def test_authorization_url_has_pkce_params() -> None:
 
 def test_exchange_code(token_stub) -> None:
     creds = asyncio.run(
-        exchange_code("some-code", "some-verifier", "http://localhost:1/callback", http_client=httpx2.AsyncClient())
+        exchange_code(
+            "some-code",
+            "some-verifier",
+            "http://localhost:1/callback",
+            state="s3cret-state",
+            http_client=httpx2.AsyncClient(),
+        )
     )
     assert creds.token == "fresh-token"
     body = token_stub.last_body
     assert body["grant_type"] == "authorization_code"
     assert body["code"] == "some-code"
+    assert body["state"] == "s3cret-state"
 
 
 def test_refresh_credentials(token_stub) -> None:

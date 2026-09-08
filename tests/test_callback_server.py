@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import httpx2
 
-from pydantic_ai_claude_code.flow import start_login_callback_server
+from pydantic_ai_claude_code.flow import _parse_callback_query, start_login_callback_server
+
+
+def test_parse_callback_query_handles_path_prefix() -> None:
+    # The bug that burned a real auth code: parse_qs on the full path keyed
+    # everything under `callback?code`, so `code` came back empty.
+    code, state = _parse_callback_query("/callback?code=ABC&state=xyz")
+    assert code == "ABC"
+    assert state == "xyz"
+    assert _parse_callback_query(None) == ("", "")
+    assert _parse_callback_query("/callback") == ("", "")
 
 
 def test_callback_server_captures_query() -> None:
