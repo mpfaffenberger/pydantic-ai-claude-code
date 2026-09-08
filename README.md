@@ -13,8 +13,8 @@ The repo is `mpfaffenberger/pydantic-ai-claude-code` and the import is
 pydantic-ai gained a Codex OAuth path where `openai-codex:gpt-6-astra` just
 works against a ChatGPT subscription. This wheel brings the same experience to
 Claude: authenticate once, then run pydantic-ai agents against your Claude
-subscription, using `claude-sonnet-4-5`, `claude-opus-5`, or whatever model you
-subscribe to.
+subscription, using `claude-fable-5-1`, `claude-sonnet-5`, `claude-opus-5`, or
+whatever model you subscribe to.
 
 Two deliberate design choices distinguish this from a fork of pydantic-ai:
 
@@ -41,7 +41,7 @@ async def main() -> None:
     await login()
 
     provider = ClaudeCodeProvider()  # loads the stored tokens
-    agent = Agent(provider.model('claude-sonnet-4-5'))
+    agent = Agent(provider.model('claude-fable-5-1'))
 
     result = await agent.run('Say hi in three words.')
     print(result.data)
@@ -55,7 +55,7 @@ asyncio.run(main())
 from pydantic_ai import Agent
 
 provider = ClaudeCodeProvider()
-agent = Agent(provider.model('claude-sonnet-4-5'))
+agent = Agent(provider.model('claude-fable-5-1'))
 
 @agent.tool_plain
 def add(a: int, b: int) -> int:

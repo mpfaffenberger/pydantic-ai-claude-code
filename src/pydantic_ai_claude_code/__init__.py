@@ -6,7 +6,7 @@ Quick start:
     from pydantic_ai_claude_code import ClaudeCodeProvider
 
     provider = ClaudeCodeProvider()
-    agent = Agent(provider.model('claude-sonnet-4-5'))
+    agent = Agent(provider.model('claude-fable-5-1'))
 """
 
 from .credentials import ClaudeCodeCredentials
