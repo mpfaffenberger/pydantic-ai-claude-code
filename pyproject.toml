@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pydantic-ai-claude-code"
+name = "pydantic-claude-code"
 version = "0.1.0"
 description = "Use your Claude Code subscription from a Pydantic AI Agent, with full tool support"
 readme = "README.md"
@@ -24,7 +24,7 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/mpfaffenberger/pydantic-ai-claude-code"
-Homepage = "https://github.com/mpfaffenberger/pydantic-ai-claude-code"
+Homepage = "https://pypi.org/project/pydantic-claude-code/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pydantic_ai_claude_code"]

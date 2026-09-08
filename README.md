@@ -1,8 +1,12 @@
-# pydantic-ai-claude-code
+# pydantic-claude-code
 
 Use your Claude Code subscription from a plain pydantic-ai `Agent`, with full
 pydantic-ai tool support. No API key, no separate billing: if Claude Code works
 from your terminal, this wheel works too.
+
+The repo is `mpfaffenberger/pydantic-ai-claude-code` and the import is
+`pydantic_ai_claude_code`; the PyPI project is `pydantic-claude-code`
+(`pip install pydantic-claude-code`).
 
 ## Why
 
