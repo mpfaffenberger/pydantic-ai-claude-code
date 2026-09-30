@@ -258,6 +258,10 @@ uv run pyright
 uv run pytest
 ```
 
+To release, bump `version` in `pyproject.toml`, merge, and push a matching tag
+(`git tag v0.4.0 && git push origin v0.4.0`). The `Publish` workflow tests,
+builds, and uploads it to PyPI with the `PYPI_API_TOKEN` repository secret.
+
 The tests never touch your real keychain or token file. They run against a
 local Messages API stub, including a full CLAI2 turn through the plugin.
 

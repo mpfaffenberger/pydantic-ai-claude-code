@@ -8,3 +8,5 @@ build/
 .ruff_cache/
 .coverage
 htmlcov/
+# Local secrets, such as a PyPI token; releases publish from GitHub Actions instead.
+.token
