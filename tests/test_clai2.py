@@ -243,7 +243,7 @@ async def test_clai2_runs_the_package_folder_as_a_drop_in(
 ) -> None:
     """Copy the package folder into the plugins folder, as the README says; a CLAI2 turn runs through it."""
     ClaudeCodeTokenStore().save(CREDS)
-    prompts = ["hi", "/exit"]
+    prompts = ["/plugins list", "hi", "/exit"]
 
     class Prompt(Generic[PromptT]):  # CLAI2 builds `PromptSession[str]`
         def __init__(self, **kwargs: object) -> None:
@@ -270,6 +270,7 @@ async def test_clai2_runs_the_package_folder_as_a_drop_in(
         store=store,
     )
 
+    assert f"claude_code: {drop_in / '__init__.py'} (enabled, loaded)" in shown.getvalue()
     assert TEXT in shown.getvalue()
     assert messages_stub.received["model"] == "claude-opus-5-5"
     loaded = {

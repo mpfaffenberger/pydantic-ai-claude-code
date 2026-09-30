@@ -48,8 +48,9 @@ The plugins folder is `$XDG_CONFIG_HOME/pydantic-clai2/plugins/`, which is
 next to CLAI2's `config.db`. To update, delete `claude_code` and copy again. To hack on the plugin, symlink the folder instead of copying it:
 `ln -s "$PWD/src/pydantic_ai_claude_code" ~/.config/pydantic-clai2/plugins/claude_code`.
 
-Dropped-in plugins load when CLAI2 starts; `/plugins` lists it as
-`claude_code`, where Space turns it off and on.
+Dropped-in plugins load when CLAI2 starts. Inside CLAI2, `/plugins` lists it as
+`claude_code`, where Space turns it off and on. (The shell's `clai2 plugins list`
+shows only plugins added by name, so it won't appear there.)
 
 **CLAI2 version:** the plugin needs `PluginHost.model_provider`
 ([pydantic/pydantic-ai#9468](https://github.com/pydantic/pydantic-ai/pull/9468)),
