@@ -21,6 +21,22 @@ class ClaudeCodeCredentialsPersistenceError(UserError):
     """Raised after refreshed in-memory credentials could not be persisted."""
 
 
+class ClaudeCodeSignInExpiredError(UserError):
+    """The stored sign-in can no longer be refreshed, so the user has to sign in again.
+
+    Raised inside the HTTP client, where the Anthropic SDK reports it as a connection error;
+    `ClaudeCodeModel` unwraps it again so callers see this message instead.
+    """
+
+    def __init__(self, reason: str) -> None:
+        """`reason` is why the refresh failed, as the token endpoint put it."""
+        super().__init__(
+            f"Your Claude Code sign-in has expired or was revoked; sign in again. ({reason}) "
+            "In CLAI2 run /claude_code login; from Python, `await pydantic_ai_claude_code.login()` "
+            "or `python -m pydantic_ai_claude_code login`."
+        )
+
+
 def _expires_soon(credentials: ClaudeCodeCredentials) -> bool:
     if credentials.expires_at is None:
         return False
@@ -41,7 +57,10 @@ class _ClaudeCodeAuth(httpx2.Auth):
         async with self.lock:
             if self.revision != used_revision:
                 return
-            updated = await refresh_credentials(self.credentials, http_client=self.refresh_client)
+            try:
+                updated = await refresh_credentials(self.credentials, http_client=self.refresh_client)
+            except UserError as exc:
+                raise ClaudeCodeSignInExpiredError(str(exc)) from exc
             self.credentials = updated
             self.revision += 1
             if self.callback is not None:

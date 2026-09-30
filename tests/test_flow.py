@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import pytest
+from pydantic_ai.exceptions import UserError
 
-from pydantic_ai_claude_code import config
+from pydantic_ai_claude_code import config, flow
 from pydantic_ai_claude_code.credentials import ClaudeCodeCredentials
 from pydantic_ai_claude_code.flow import (
     ClaudeCodeOAuthFlow,
@@ -78,6 +81,62 @@ def test_refresh_credentials(token_stub) -> None:
     refreshed = asyncio.run(refresh_credentials(original, http_client=httpx2.AsyncClient()))
     assert refreshed.token == "fresh-token"
     assert refreshed.refresh_token.get_secret_value() == "fresh-refresh"
+
+
+class _MemoryStore:
+    def __init__(self) -> None:
+        self.saved: ClaudeCodeCredentials | None = None
+
+    def load(self) -> ClaudeCodeCredentials | None:
+        return self.saved
+
+    def save(self, credentials: ClaudeCodeCredentials) -> None:
+        self.saved = credentials
+
+    def delete(self) -> None:
+        self.saved = None
+
+
+def _visit_redirect_later(url: str, *, state: str | None = None) -> None:
+    """Act as the browser: follow the authorization URL's redirect with a code, after a delay."""
+    query = parse_qs(urlsplit(url).query)
+    redirect = query["redirect_uri"][0].replace("localhost", "127.0.0.1")
+    sent_state = state if state is not None else query["state"][0]
+
+    def visit() -> None:
+        time.sleep(0.2)
+        httpx2.get(f"{redirect}?code=the-code&state={sent_state}")
+
+    threading.Thread(target=visit, daemon=True).start()
+
+
+async def test_login_waits_off_the_event_loop(token_stub, monkeypatch) -> None:
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    ticks = 0
+
+    async def tick() -> None:
+        nonlocal ticks
+        while True:
+            ticks += 1
+            await asyncio.sleep(0.01)
+
+    store = _MemoryStore()
+    ticker = asyncio.create_task(tick())
+    credentials = await flow.login(store=store, on_url=_visit_redirect_later)
+    ticker.cancel()
+
+    assert credentials.token == "fresh-token"
+    assert store.saved == credentials
+    assert token_stub.last_body["code"] == "the-code"
+    assert ticks > 5, "the event loop was blocked while waiting for the browser"
+
+
+async def test_login_rejects_a_mismatched_state(token_stub, monkeypatch) -> None:
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    store = _MemoryStore()
+    with pytest.raises(UserError, match="state mismatch"):
+        await flow.login(store=store, on_url=lambda url: _visit_redirect_later(url, state="forged"))
+    assert store.saved is None
 
 
 def test_parse_pasteback() -> None:

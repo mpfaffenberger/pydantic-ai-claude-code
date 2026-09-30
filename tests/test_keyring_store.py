@@ -6,6 +6,7 @@ import json
 
 import keyring
 import pytest
+from keyring.backends import fail, null
 from pydantic_ai.exceptions import UserError
 
 from pydantic_ai_claude_code.credentials import ClaudeCodeCredentials
@@ -26,10 +27,14 @@ def fake_keyring(monkeypatch) -> dict[str, str]:
     def get_password(service: str, username: str) -> str | None:
         return store.get((service, username))
 
+    def delete_password(service: str, username: str) -> None:
+        del store[(service, username)]
+
     def get_keyring() -> object:
         # Pretend a keychain backend exists.
         return object()
 
+    monkeypatch.setattr(keyring, "delete_password", delete_password)
     monkeypatch.setattr(keyring, "set_password", set_password)
     monkeypatch.setattr(keyring, "get_password", get_password)
     monkeypatch.setattr(keyring, "get_keyring", get_keyring)
@@ -43,6 +48,23 @@ def test_keyring_roundtrip(fake_keyring) -> None:
     assert store.load() == creds
     stored = fake_keyring[(KeyringTokenStore.SERVICE, KeyringTokenStore.USERNAME)]
     assert json.loads(stored)["access_token"] == "a"
+
+
+def test_keyring_delete(fake_keyring) -> None:
+    store = KeyringTokenStore()
+    store.save(ClaudeCodeCredentials(access_token="a", refresh_token="b"))
+    store.delete()
+    assert store.load() is None
+    assert not fake_keyring
+    store.delete()  # nothing stored: a no-op, not an error
+
+
+def test_explicit_backend_beats_env(fake_keyring, monkeypatch) -> None:
+    monkeypatch.setenv("CLAUDE_CODE_CREDENTIALS", "keyring")
+    assert isinstance(default_store("file"), ClaudeCodeTokenStore)
+    monkeypatch.setenv("CLAUDE_CODE_CREDENTIALS", "file")
+    assert isinstance(default_store("keyring"), KeyringTokenStore)
+    assert isinstance(default_store("auto"), KeyringTokenStore)
 
 
 def test_default_store_prefers_keyring(fake_keyring, monkeypatch) -> None:
@@ -62,6 +84,15 @@ def test_default_store_falls_back_to_file(monkeypatch, tmp_path) -> None:
     # file store must be used, and it must respect CLAUDE_CODE_AUTH_FILE.
     monkeypatch.setenv("CLAUDE_CODE_AUTH_FILE", str(tmp_path / "custom.json"))
     assert default_store().path == tmp_path / "custom.json"  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("backend", [fail.Keyring, null.Keyring])
+def test_default_store_treats_placeholder_backends_as_no_keyring(backend, monkeypatch) -> None:
+    # Headless Linux returns `fail.Keyring` instead of raising, so it must still fall back to the file.
+    monkeypatch.setattr(keyring, "get_keyring", backend)
+    assert isinstance(default_store(), ClaudeCodeTokenStore)
+    with pytest.raises(UserError, match="No OS keyring"):
+        default_store("keyring").load()
 
 
 def test_default_store_env_override(monkeypatch, fake_keyring) -> None:

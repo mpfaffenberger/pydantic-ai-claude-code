@@ -1,0 +1,249 @@
+"""The CLAI2 plugin: registration, sign-in, the settings menu, and a real CLAI2 turn on a stubbed API."""
+
+from __future__ import annotations
+
+import io
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import Generic, TypeVar, cast
+
+import pytest
+from pydantic import JsonValue
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import UserError
+from pydantic_clai2 import chat
+from pydantic_clai2.commands import Command
+from pydantic_clai2.config import Settings
+from pydantic_clai2.config.settings_store import SettingsStore
+from pydantic_clai2.plugins import PluginHost
+from pydantic_clai2.ui.menus.field_menu import Runners
+from rich.console import Console
+from termflow.tui import MenuItem
+from termflow.tui.menu import Menu, MenuResult
+
+from conftest import TEXT, MessagesServer
+from pydantic_ai_claude_code import clai2, config, storage
+from pydantic_ai_claude_code.clai2 import (
+    SIGNED_IN,
+    SIGNED_OUT,
+    ClaudeCodeConfig,
+    ClaudeCodeSettings,
+    activate,
+    configure,
+    token_store,
+)
+from pydantic_ai_claude_code.credentials import ClaudeCodeCredentials
+from pydantic_ai_claude_code.model import ClaudeCodeModel
+from pydantic_ai_claude_code.storage import ClaudeCodeTokenStore, KeyringTokenStore, TokenStore
+
+PromptT = TypeVar("PromptT")
+CREDS = ClaudeCodeCredentials(access_token="sub-token", refresh_token="refresh")
+URL = "https://claude.ai/oauth/authorize?state=x"
+
+
+def make_host(saved: list[dict[str, JsonValue]] | None = None) -> PluginHost[None]:
+    return PluginHost[None](
+        name="claude_code",
+        console=Console(file=io.StringIO(), width=300),
+        settings={},
+        save_settings=(saved if saved is not None else []).append,
+    )
+
+
+def output(host: PluginHost[None]) -> str:
+    return cast(io.StringIO, host.console.file).getvalue()
+
+
+def command(host: PluginHost[None]) -> Command:
+    return next(command for command in host.commands if command.name == clai2.COMMAND)
+
+
+async def run(host: PluginHost[None], *args: str) -> str:
+    result = command(host).handler(list(args))
+    return await cast(Awaitable[str], result)
+
+
+async def fake_login(*, store: TokenStore, on_url: Callable[[str], None]) -> ClaudeCodeCredentials:
+    on_url(URL)
+    store.save(CREDS)
+    return CREDS
+
+
+async def failing_login(*, store: TokenStore, on_url: Callable[[str], None]) -> ClaudeCodeCredentials:
+    raise UserError("Claude Code OAuth callback timed out.")
+
+
+def pick(value: str) -> MenuResult:
+    return MenuResult(item=MenuItem(value, value=value))
+
+
+def scripted(*lists: MenuResult, choice: str = "file") -> Runners:
+    remaining = iter(lists)
+
+    def run_list(menu: Menu) -> MenuResult:
+        return next(remaining, MenuResult(cancelled=True))
+
+    return Runners(run_list=run_list, run_choice=lambda menu: pick(choice))
+
+
+def test_models_are_the_current_claude_lineup() -> None:
+    assert config.MODELS == ("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-haiku-4-5")
+
+
+def test_activate_registers_the_prefix_the_menu_and_the_command() -> None:
+    host = make_host()
+    activate(host)
+    [provider] = host.model_providers
+    assert provider.prefix == "claude-code"
+    assert provider.names == tuple(f"claude-code:{name}" for name in config.MODELS)
+    assert host.configurer is not None
+    assert list(command(host).complete(["log"])) == ["login", "logout"]
+    assert list(command(host).complete(["status", "x"])) == []
+
+
+def test_activate_explains_an_old_clai2() -> None:
+    class OldHost:
+        pass
+
+    with pytest.raises(RuntimeError, match="PluginHost.model_provider"):
+        activate(cast("PluginHost[None]", OldHost()))
+
+
+def test_resolve_needs_a_sign_in_and_reuses_the_provider_until_it_changes() -> None:
+    host = make_host()
+    activate(host)
+    [provider] = host.model_providers
+    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code login"):
+        provider.resolve("claude-opus-5-5")
+
+    store = ClaudeCodeTokenStore()  # `auto` without a keychain, as in these tests, is the file
+    store.save(CREDS)
+    opus, sonnet = provider.resolve("claude-opus-5-5"), provider.resolve("claude-sonnet-5-5")
+    assert isinstance(opus, ClaudeCodeModel) and opus.model_name == "claude-opus-5-5"
+    assert isinstance(sonnet, ClaudeCodeModel) and sonnet.client is opus.client
+
+    store.save(ClaudeCodeCredentials(access_token="new", refresh_token="new-refresh"))
+    renewed = provider.resolve("claude-opus-5-5")
+    assert isinstance(renewed, ClaudeCodeModel) and renewed.client is not opus.client
+
+
+async def test_command_signs_in_reports_and_signs_out(monkeypatch: pytest.MonkeyPatch, isolated_home: Path) -> None:
+    monkeypatch.setattr(clai2, "login", fake_login)
+    host = make_host()
+    activate(host)
+    assert (await run(host, "status")).startswith("Not signed in (sign-in would be kept in the file ")
+
+    message = await run(host, "login")
+    assert message == (
+        "Signed in to Claude Code. Choose a model in /add_model > claude-code, or run /model claude-code:claude-opus-5-5."
+    )
+    assert URL in output(host)
+    status = await run(host, "status")
+    assert status == f"Signed in to Claude Code; tokens are kept in the file {ClaudeCodeTokenStore().path}."
+    assert str(isolated_home) in status
+
+    assert (await run(host, "logout")).startswith("Signed out of Claude Code.")
+    assert ClaudeCodeTokenStore().load() is None
+    with pytest.raises(ValueError, match="Usage: /claude_code"):
+        await run(host, "bogus")
+
+
+async def test_bare_command_opens_the_settings_menu(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_configure(source: ClaudeCodeConfig, show_url: Callable[[str], None]) -> str:
+        show_url(URL)
+        return f"menu for {source.settings.credentials}"
+
+    monkeypatch.setattr(clai2, "configure", fake_configure)
+    host = make_host()
+    activate(host)
+    assert await run(host) == "menu for auto"
+    assert host.configurer is not None and await host.configurer() == "menu for auto"
+    assert URL in output(host)
+
+
+async def test_menu_switches_storage_then_signs_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(clai2, "login", fake_login)
+    saved: list[ClaudeCodeSettings] = []
+    source = ClaudeCodeConfig(ClaudeCodeSettings(), saved.append)
+    urls: list[str] = []
+
+    message = await configure(source, urls.append, scripted(pick("credentials"), pick("account")))
+
+    assert saved == [ClaudeCodeSettings(credentials="file")]
+    assert message.splitlines() == [
+        "Claude Code credential storage: File (0600). "
+        f"Not signed in (sign-in would be kept in the file {ClaudeCodeTokenStore().path}). Run /claude_code login.",
+        "Signed in to Claude Code. Choose a model in /add_model > claude-code, or run /model claude-code:claude-opus-5-5.",
+    ]
+    assert urls == [URL]
+    assert ClaudeCodeTokenStore().load() == CREDS
+
+
+async def test_menu_reports_a_failed_sign_in_and_an_untouched_menu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(clai2, "login", failing_login)
+    source = ClaudeCodeConfig(ClaudeCodeSettings(), lambda settings: None)
+    assert await configure(source, print, scripted(pick("account"))) == "Claude Code OAuth callback timed out."
+    assert await configure(source, print, scripted()) == "Claude Code settings unchanged."
+
+
+def test_auto_follows_the_env_var_and_explicit_choices_do_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(storage, "_keyring_available", lambda: True)
+    monkeypatch.setenv("CLAUDE_CODE_CREDENTIALS", "file")
+    assert isinstance(token_store("auto"), ClaudeCodeTokenStore)
+    assert isinstance(token_store("keyring"), KeyringTokenStore)
+    monkeypatch.delenv("CLAUDE_CODE_CREDENTIALS")
+    assert isinstance(token_store("auto"), KeyringTokenStore)
+    assert isinstance(token_store("file"), ClaudeCodeTokenStore)
+
+
+def test_rows_show_state_validate_and_reset() -> None:
+    saved: list[ClaudeCodeSettings] = []
+    source = ClaudeCodeConfig(ClaudeCodeSettings(credentials="file"), saved.append)
+    account, storage = source.rows()
+    assert source.current(account) == SIGNED_OUT
+    assert source.current(storage) == "file"
+    assert source.problem(account, "anything") is None
+    assert source.problem(storage, "keyring") is None
+    assert source.problem(storage, "cloud") is not None
+
+    ClaudeCodeTokenStore().save(CREDS)
+    assert source.current(account) == SIGNED_IN
+    assert source.reset(account).startswith("Signed out")
+    assert source.current(account) == SIGNED_OUT
+
+    assert source.reset(storage).startswith("Claude Code credential storage: Keyring, else a file.")
+    assert saved == [ClaudeCodeSettings(credentials="auto")]
+
+
+async def test_clai2_runs_a_claude_code_model(
+    messages_stub: MessagesServer, monkeypatch: pytest.MonkeyPatch, isolated_home: Path
+) -> None:
+    """The plugin as a drop-in: CLAI2 resolves `claude-code:` through it and the turn reaches the Messages API."""
+    monkeypatch.setattr(config, "API_BASE_URL", messages_stub.url)
+    ClaudeCodeTokenStore().save(CREDS)
+    prompts = ["hi", "/exit"]
+
+    class Prompt(Generic[PromptT]):  # CLAI2 builds `PromptSession[str]`
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        async def prompt_async(self, label: str, **kwargs: object) -> str:
+            return prompts.pop(0)
+
+    monkeypatch.setattr("pydantic_clai2._app.PromptSession", Prompt)
+    store = SettingsStore(isolated_home / "clai2" / "config.db")
+    store.plugins_dir.mkdir(parents=True, exist_ok=True)
+    (store.plugins_dir / "claude_code.py").write_text("from pydantic_ai_claude_code.clai2 import activate\n")
+    shown = io.StringIO()
+
+    await chat(
+        Agent("test"),
+        deps=None,
+        settings=Settings(model="claude-code:claude-opus-5-5"),
+        console=Console(file=shown, width=200),
+        store=store,
+    )
+
+    assert TEXT in shown.getvalue()
+    assert messages_stub.received["model"] == "claude-opus-5-5"
+    assert "You are Claude Code" in str(messages_stub.received.get("system"))

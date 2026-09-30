@@ -47,9 +47,9 @@ class ClaudeCodeCredentials(BaseModel):
             previous: Prior credentials whose refresh token is reused when the
                 issuer omits a new one, as Anthropic's refresh responses do.
         """
-        root = data if isinstance(data, dict) else None
-        access_token = root.get("access_token") if root is not None else None
-        refresh_token = root.get("refresh_token") if root is not None else None
+        root: dict[object, object] = data if isinstance(data, dict) else {}
+        access_token = root.get("access_token")
+        refresh_token = root.get("refresh_token")
         if not isinstance(access_token, str):
             raise UserError("Claude Code token response did not contain a string `access_token`.")
         if not isinstance(refresh_token, str):

@@ -7,13 +7,14 @@ plain localhost redirect are supported.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import secrets
 import threading
 import webbrowser
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
 from urllib.parse import parse_qs, urlencode
 
 import httpx2
@@ -22,6 +23,7 @@ from pydantic_ai.exceptions import UserError
 
 from . import config
 from .credentials import ClaudeCodeCredentials
+from .storage import TokenStore, default_store
 
 
 class ClaudeCodeOAuthFlow:
@@ -151,7 +153,7 @@ class _CallbackServer(ThreadingHTTPServer):
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
-    server: _CallbackServer
+    server: _CallbackServer  # pyright: ignore[reportIncompatibleVariableOverride] - always our server
 
     def do_GET(self) -> None:  # noqa: N802
         if not self.server.received.is_set():
@@ -175,17 +177,24 @@ def start_login_callback_server() -> _CallbackServer:
     return server
 
 
-async def login(*, store: Any = None) -> ClaudeCodeCredentials:
+def _print_url(url: str) -> None:
+    print(f"Open this URL in your browser if it did not open automatically:\n{url}")
+
+
+async def login(
+    *, store: TokenStore | None = None, on_url: Callable[[str], None] = _print_url
+) -> ClaudeCodeCredentials:
     """Run the full OAuth flow and persist the minted credentials.
+
+    Waiting for the browser happens off the event loop, so a terminal UI keeps drawing meanwhile.
 
     Args:
         store: The token store to write to. Defaults to the standard store.
+        on_url: Shows the authorization URL, in case the browser does not open. Prints it by default.
 
     Returns:
         The credentials that were persisted.
     """
-    from .storage import default_store
-
     if store is None:
         store = default_store()
     server = start_login_callback_server()
@@ -193,11 +202,11 @@ async def login(*, store: Any = None) -> ClaudeCodeCredentials:
         redirect_uri = f"{config.REDIRECT_HOST}:{server.server_address[1]}/{config.REDIRECT_PATH}"
         flow = ClaudeCodeOAuthFlow(redirect_uri=redirect_uri)
         url = flow.authorization_url()
-        print(f"Open this URL in your browser if it did not open automatically:\n{url}")
+        on_url(url)
         # Launch the browser off the event path: on some macOS setups `webbrowser.open`
         # hangs until the UI settles, which would starve the callback wait below.
         threading.Thread(target=_open_browser, args=(url,), daemon=True).start()
-        if not server.received.wait(config.CALLBACK_TIMEOUT):
+        if not await asyncio.to_thread(server.received.wait, config.CALLBACK_TIMEOUT):
             raise UserError("Claude Code OAuth callback timed out.")
         code, state = _parse_callback_query(server.query)
         if state and state != flow.state:
@@ -208,6 +217,8 @@ async def login(*, store: Any = None) -> ClaudeCodeCredentials:
     finally:
         server.shutdown()
         server.server_close()
+        # Release the waiting thread at once when the login was cancelled.
+        server.received.set()
     store.save(credentials)
     return credentials
 

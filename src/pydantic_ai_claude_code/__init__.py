@@ -1,4 +1,4 @@
-"""Use your Claude Code subscription from a Pydantic AI Agent.
+"""Use your Claude Code subscription from a Pydantic AI Agent, or from CLAI2 via `pydantic_ai_claude_code.clai2`.
 
 Quick start:
 
@@ -8,6 +8,7 @@ Quick start:
     agent = Agent(ClaudeCodeModel('claude-fable-5-1'))
 """
 
+from .auth import ClaudeCodeSignInExpiredError
 from .credentials import ClaudeCodeCredentials
 from .flow import (
     ClaudeCodeOAuthFlow,
@@ -25,6 +26,7 @@ __all__ = [
     "ClaudeCodeModel",
     "ClaudeCodeOAuthFlow",
     "ClaudeCodeProvider",
+    "ClaudeCodeSignInExpiredError",
     "ClaudeCodeTokenStore",
     "KeyringTokenStore",
     "default_auth_path",

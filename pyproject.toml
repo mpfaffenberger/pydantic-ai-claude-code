@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pydantic-claude-code"
-version = "0.3.0"
-description = "Use your Claude Code subscription from a Pydantic AI Agent, with full tool support"
+version = "0.4.0"
+description = "Use your Claude Code subscription from a Pydantic AI Agent or CLAI2, with full tool support"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 dependencies = [
@@ -34,14 +34,31 @@ packages = ["src/pydantic_ai_claude_code"]
 line-length = 120
 target-version = "py311"
 
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
 
 [project.optional-dependencies]
+# The CLAI2 plugin (`pydantic_ai_claude_code.clai2`) needs `PluginHost.model_provider`, which 0.52.0 lacks:
+# https://github.com/pydantic/pydantic-ai/pull/9468.
+clai2 = ["pydantic-clai2>0.52.0"]
 dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.23.1",
     "ruff>=0.15,<0.16",
+    "pyright>=1.1.400",
 ]
+
+# Until pydantic/pydantic-ai#9468 is released, develop and test the plugin against that PR's commit. CLAI2
+# pins Pydantic AI and the harness to its own build, so all four come from the same commit. Remove this
+# table once a pydantic-clai2 release has `PluginHost.model_provider`.
+[tool.uv.sources]
+pydantic-clai2 = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "src/pydantic_clai2" }
+pydantic-ai-harness = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "src/pydantic_ai_harness" }
+pydantic-ai-slim = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "pydantic_ai_slim" }
+pydantic-graph = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "pydantic_graph" }
