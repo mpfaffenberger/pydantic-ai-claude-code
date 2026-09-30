@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart
+from pydantic_ai import RunContext
+from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, SystemPromptPart
+from pydantic_ai.models import ModelRequestParameters, StreamedResponse
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers import Provider
+from pydantic_ai.settings import ModelSettings
 
 from . import config
+from .auth import ClaudeCodeSignInExpiredError
 
 
 class ClaudeCodeModel(AnthropicModel):
@@ -46,6 +53,43 @@ class ClaudeCodeModel(AnthropicModel):
         model_request_parameters=None,
     ) -> list[ModelMessage]:
         return super().prepare_messages(_prepend_persona(messages), model_request_parameters)
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        with _surface_expired_sign_in():
+            return await super().request(messages, model_settings, model_request_parameters)
+
+    @asynccontextmanager
+    async def request_stream(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+        run_context: RunContext[Any] | None = None,
+    ) -> AsyncGenerator[StreamedResponse]:
+        with _surface_expired_sign_in():
+            async with super().request_stream(
+                messages, model_settings, model_request_parameters, run_context
+            ) as response:
+                yield response
+
+
+@contextmanager
+def _surface_expired_sign_in() -> Iterator[None]:
+    """Re-raise an expired sign-in that the SDK reported as `Connection error.`."""
+    try:
+        yield
+    except ModelAPIError as exc:
+        cause: BaseException | None = exc
+        while cause is not None:
+            if isinstance(cause, ClaudeCodeSignInExpiredError):
+                raise cause from exc
+            cause = cause.__cause__
+        raise
 
 
 def _prepend_persona(messages: list[ModelMessage]) -> list[ModelMessage]:

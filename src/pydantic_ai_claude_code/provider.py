@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx2
 
 from anthropic import AsyncAnthropic
@@ -12,7 +10,7 @@ from pydantic_ai.exceptions import UserError
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from . import config
-from .auth import _ClaudeCodeAuth
+from .auth import CredentialsRefreshCallback, _ClaudeCodeAuth
 from .credentials import ClaudeCodeCredentials
 from .storage import TokenStore, default_store
 
@@ -34,7 +32,7 @@ class ClaudeCodeProvider(AnthropicProvider):
         credentials: ClaudeCodeCredentials | None = None,
         *,
         store: TokenStore | None = None,
-        on_credentials_refresh: Any = None,
+        on_credentials_refresh: CredentialsRefreshCallback | None = None,
         http_client: httpx2.AsyncClient | None = None,
         base_url: str | None = None,
     ) -> None:

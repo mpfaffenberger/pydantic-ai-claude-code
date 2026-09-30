@@ -1,7 +1,7 @@
 """OAuth endpoint and client configuration for Claude Code authentication.
 
-These constants were verified against the Claude Code CLI 2.1.263 binary
-(embedded config) and its published client metadata:
+These constants were verified against the Claude Code CLI 2.1.285 binary
+(`@anthropic-ai/claude-code-darwin-arm64`, embedded config) and its published client metadata:
 
 - `https://claude.ai/oauth/claude-code-client-metadata` (dynamic client registration)
 - Authorization server: `https://claude.com/cai/oauth/authorize`
@@ -23,6 +23,13 @@ SCOPES = "org:create_api_key user:profile user:inference"
 # The subscription tokens minted by this flow are valid against api.anthropic.com.
 API_BASE_URL = "https://api.anthropic.com"
 
+# The current Claude models, offered in CLAI2's model menus. Checked 2026-09-30 against three
+# sources that agree: Anthropic's models overview
+# (https://docs.anthropic.com/en/docs/about-claude/models/overview), the `ModelParam` literal of
+# `anthropic` 1.9.0 that Pydantic AI's `KnownModelName` is built from, and genai-prices 0.1.9.
+# Any other model ID your subscription serves (e.g. `claude-opus-4-8`) works too; it is just not listed.
+MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-haiku-4-5")
+
 # Must open the system context when authenticating with Claude Code tokens. This
 # is the exact persona string the official CLI sends; the subscription backend
 # expects it at position 0.
@@ -40,5 +47,6 @@ PASTEBACK_SCHEMES = ("claude://",)
 # Request headers that must accompany Claude Code subscription tokens. `anthropic-beta` is
 # appended (never replaced) by the auth layer so feature betas set by pydantic-ai survive.
 ANTHROPIC_BETA = "oauth-2025-04-20"
-USER_AGENT = "claude-cli/2.1.263 (external, cli)"
+# The subscription backend gates models on this version: Opus 5.5 answers 400 below 2.1.280.
+USER_AGENT = "claude-cli/2.1.285 (external, cli)"
 X_APP = "cli"

@@ -18,11 +18,21 @@ def test_save_load_roundtrip(tmp_path) -> None:
     assert store.load() == creds
 
 
-def test_save_sets_0644_perm(tmp_path) -> None:
+def test_save_is_readable_only_by_owner(tmp_path) -> None:
     store = ClaudeCodeTokenStore(path=tmp_path / "auth.json")
     store.save(ClaudeCodeCredentials(access_token="a", refresh_token="b"))
+    store.save(ClaudeCodeCredentials(access_token="c", refresh_token="d"))  # replacing keeps the mode
     mode = stat.S_IMODE((tmp_path / "auth.json").stat().st_mode)
-    assert mode == 0o644
+    assert mode == 0o600
+    assert not (tmp_path / "auth.tmp").exists()
+
+
+def test_delete_removes_the_file_and_tolerates_absence(tmp_path) -> None:
+    store = ClaudeCodeTokenStore(path=tmp_path / "auth.json")
+    store.save(ClaudeCodeCredentials(access_token="a", refresh_token="b"))
+    store.delete()
+    assert store.load() is None
+    store.delete()
 
 
 def test_load_missing_returns_none(tmp_path) -> None:
