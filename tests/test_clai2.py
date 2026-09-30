@@ -109,7 +109,7 @@ def test_activate_explains_an_old_clai2() -> None:
     class OldHost:
         pass
 
-    with pytest.raises(RuntimeError, match="PluginHost.model_provider"):
+    with pytest.raises(RuntimeError, match=r"cannot run plugin models.*run `uv run clai2` from a checkout"):
         activate(cast("PluginHost[None]", OldHost()))
 
 

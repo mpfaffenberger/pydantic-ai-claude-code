@@ -55,11 +55,12 @@ dev = [
     "pyright>=1.1.400",
 ]
 
-# Until pydantic/pydantic-ai#9468 is released, develop and test the plugin against that PR's commit. CLAI2
-# pins Pydantic AI and the harness to its own build, so all four come from the same commit. Remove this
+# Until a pydantic-clai2 release includes pydantic/pydantic-ai#9468, develop and test the plugin against its
+# merge commit on main. CLAI2 pins Pydantic AI and the harness to its own build, so all four come from the same
+# commit. Remove this
 # table once a pydantic-clai2 release has `PluginHost.model_provider`.
 [tool.uv.sources]
-pydantic-clai2 = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "src/pydantic_clai2" }
-pydantic-ai-harness = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "src/pydantic_ai_harness" }
-pydantic-ai-slim = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "pydantic_ai_slim" }
-pydantic-graph = { git = "https://github.com/pydantic/pydantic-ai", rev = "8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585", subdirectory = "pydantic_graph" }
+pydantic-clai2 = { git = "https://github.com/pydantic/pydantic-ai", rev = "65a8f8f78fe88fd6805c6a71069e1404ab461cc8", subdirectory = "src/pydantic_clai2" }
+pydantic-ai-harness = { git = "https://github.com/pydantic/pydantic-ai", rev = "65a8f8f78fe88fd6805c6a71069e1404ab461cc8", subdirectory = "src/pydantic_ai_harness" }
+pydantic-ai-slim = { git = "https://github.com/pydantic/pydantic-ai", rev = "65a8f8f78fe88fd6805c6a71069e1404ab461cc8", subdirectory = "pydantic_ai_slim" }
+pydantic-graph = { git = "https://github.com/pydantic/pydantic-ai", rev = "65a8f8f78fe88fd6805c6a71069e1404ab461cc8", subdirectory = "pydantic_graph" }

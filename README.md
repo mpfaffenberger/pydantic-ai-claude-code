@@ -53,17 +53,15 @@ Dropped-in plugins load when CLAI2 starts. Inside CLAI2, `/plugins` lists it as
 shows only plugins added by name, so it won't appear there.)
 
 **CLAI2 version:** the plugin needs `PluginHost.model_provider`
-([pydantic/pydantic-ai#9468](https://github.com/pydantic/pydantic-ai/pull/9468)),
-which the first `pydantic-clai2` release after 0.52.0 includes. On an older
-CLAI2 the plugin fails to load with `This pydantic-clai2 cannot run plugin
-models`. Until that release, run CLAI2 from that pull request's commit:
+([pydantic/pydantic-ai#9468](https://github.com/pydantic/pydantic-ai/pull/9468),
+merged), which the next `pydantic-clai2` release after 0.52.0 includes. On an
+older CLAI2 the plugin fails to load with `This pydantic-clai2 cannot run plugin
+models`. Until that release, run CLAI2 from pydantic-ai's `main`:
 
 ```bash
-uvx --from "git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=src/pydantic_clai2" \
-  --with "pydantic-ai-slim[anthropic,mcp,openai] @ git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=pydantic_ai_slim" \
-  --with "pydantic-ai-harness[coder] @ git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=src/pydantic_ai_harness" \
-  --with "pydantic-graph @ git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=pydantic_graph" \
-  clai2
+git clone https://github.com/pydantic/pydantic-ai
+cd pydantic-ai
+uv run clai2
 ```
 
 Or install it as a package instead, into CLAI2's environment, and point CLAI2

@@ -186,8 +186,8 @@ def activate(host: PluginHost[DepsT]) -> None:
     """Register `claude-code:` models, the settings menu, and `/claude_code`."""
     if not hasattr(host, "model_provider"):
         raise RuntimeError(
-            "This pydantic-clai2 cannot run plugin models. Upgrade to a release with PluginHost.model_provider "
-            "(https://github.com/pydantic/pydantic-ai/pull/9468)."
+            "This pydantic-clai2 cannot run plugin models. Upgrade to a release after 0.52.0, or until one is "
+            "out, run `uv run clai2` from a checkout of https://github.com/pydantic/pydantic-ai main."
         )
     source = ClaudeCodeConfig(host.settings(ClaudeCodeSettings), host.save_settings)
     providers = Providers()
