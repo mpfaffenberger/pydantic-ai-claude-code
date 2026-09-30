@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import io
+import shutil
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Generic, TypeVar, cast
@@ -22,6 +25,7 @@ from termflow.tui import MenuItem
 from termflow.tui.menu import Menu, MenuResult
 
 from conftest import TEXT, MessagesServer
+import pydantic_ai_claude_code
 from pydantic_ai_claude_code import clai2, config, storage
 from pydantic_ai_claude_code.clai2 import (
     SIGNED_IN,
@@ -215,11 +219,29 @@ def test_rows_show_state_validate_and_reset() -> None:
     assert saved == [ClaudeCodeSettings(credentials="auto")]
 
 
-async def test_clai2_runs_a_claude_code_model(
+PACKAGE = Path(pydantic_ai_claude_code.__file__).parent
+# What CLAI2 itself installs, so a copied folder can import it: see pydantic-clai2's dependencies.
+CLAI2_PROVIDES = {"anthropic", "httpx2", "keyring", "pydantic", "pydantic_ai", "pydantic_clai2"}
+
+
+@pytest.mark.parametrize("module", sorted(PACKAGE.glob("*.py")), ids=lambda path: path.name)
+def test_the_folder_imports_only_itself_the_stdlib_and_clai2s_dependencies(module: Path) -> None:
+    """A copy in the plugins folder has no installed `pydantic_ai_claude_code` to fall back on."""
+    for node in ast.walk(ast.parse(module.read_text())):
+        if isinstance(node, ast.ImportFrom) and node.level:
+            continue  # relative: resolved inside the copied folder
+        names = [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
+        if isinstance(node, ast.ImportFrom):
+            names = [node.module or ""]
+        for name in names:
+            top = name.partition(".")[0]
+            assert top in sys.stdlib_module_names or top in CLAI2_PROVIDES, f"{module.name} imports {name}"
+
+
+async def test_clai2_runs_the_package_folder_as_a_drop_in(
     messages_stub: MessagesServer, monkeypatch: pytest.MonkeyPatch, isolated_home: Path
 ) -> None:
-    """The plugin as a drop-in: CLAI2 resolves `claude-code:` through it and the turn reaches the Messages API."""
-    monkeypatch.setattr(config, "API_BASE_URL", messages_stub.url)
+    """Copy the package folder into the plugins folder, as the README says; a CLAI2 turn runs through it."""
     ClaudeCodeTokenStore().save(CREDS)
     prompts = ["hi", "/exit"]
 
@@ -233,7 +255,11 @@ async def test_clai2_runs_a_claude_code_model(
     monkeypatch.setattr("pydantic_clai2._app.PromptSession", Prompt)
     store = SettingsStore(isolated_home / "clai2" / "config.db")
     store.plugins_dir.mkdir(parents=True, exist_ok=True)
-    (store.plugins_dir / "claude_code.py").write_text("from pydantic_ai_claude_code.clai2 import activate\n")
+    drop_in = store.plugins_dir / "claude_code"
+    shutil.copytree(PACKAGE, drop_in, ignore=shutil.ignore_patterns("__pycache__"))
+    # The copy is its own module tree, so patching the installed `config` would not reach it.
+    copied_config = drop_in / "config.py"
+    copied_config.write_text(copied_config.read_text().replace(config.API_BASE_URL, messages_stub.url))
     shown = io.StringIO()
 
     await chat(
@@ -246,4 +272,8 @@ async def test_clai2_runs_a_claude_code_model(
 
     assert TEXT in shown.getvalue()
     assert messages_stub.received["model"] == "claude-opus-5-5"
+    loaded = {
+        Path(module.__file__).parent for module in list(sys.modules.values()) if getattr(module, "__file__", None)
+    }
+    assert drop_in in loaded, "the turn ran on the copied folder"
     assert "You are Claude Code" in str(messages_stub.received.get("system"))

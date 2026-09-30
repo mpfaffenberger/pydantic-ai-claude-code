@@ -44,7 +44,8 @@ asyncio_mode = "auto"
 addopts = "-q"
 
 [project.optional-dependencies]
-# The CLAI2 plugin (`pydantic_ai_claude_code.clai2`) needs `PluginHost.model_provider`, which 0.52.0 lacks:
+# Only for installing the plugin as a package; the usual install copies the package folder into CLAI2's
+# plugins folder. Either way it needs `PluginHost.model_provider`, which 0.52.0 lacks:
 # https://github.com/pydantic/pydantic-ai/pull/9468.
 clai2 = ["pydantic-clai2>0.52.0"]
 dev = [

@@ -1,8 +1,10 @@
 """The CLAI2 plugin: chat with your Claude Code subscription as `claude-code:MODEL`.
 
-Turn it on with `/plugins add claude_code pydantic_ai_claude_code.clai2`. The settings menu opens right away,
-and again on `C` in `/plugins`, `/plugins configure claude_code`, and `/claude_code`: sign in through the
-browser, sign out, and choose where the sign-in is kept. Then pick a model in `/add_model` > `claude-code`.
+Install it by copying this package's folder into CLAI2's plugins folder as `claude_code/`; CLAI2 loads it at
+startup through the package's `activate`. Everything it imports already ships with CLAI2, and it uses only
+relative imports, so the copy runs on its own. `/claude_code` (or `C` in `/plugins`) opens the settings menu:
+sign in through the browser, sign out, and choose where the sign-in is kept. Then pick a model in
+`/add_model` > `claude-code`.
 
 The sign-in is an OAuth token pair, not an API key, so it does not go in `/keys`. It is kept where this
 package keeps it outside CLAI2 (the OS keyring by default), so one sign-in serves CLAI2 and your own agents.
