@@ -94,12 +94,13 @@ def test_models_are_the_current_claude_lineup() -> None:
     assert config.MODELS == ("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-haiku-4-5")
 
 
-def test_activate_registers_the_prefix_the_menu_and_the_command() -> None:
+def test_activate_registers_the_prefix_the_login_the_menu_and_the_command() -> None:
     host = make_host()
     activate(host)
     [provider] = host.model_providers
     assert provider.prefix == "claude-code"
     assert provider.names == tuple(f"claude-code:{name}" for name in config.MODELS)
+    assert [login.name for login in host.logins] == ["claude"]
     assert host.configurer is not None
     assert list(command(host).complete(["log"])) == ["login", "logout"]
     assert list(command(host).complete(["status", "x"])) == []
@@ -117,7 +118,7 @@ def test_resolve_needs_a_sign_in_and_reuses_the_provider_until_it_changes() -> N
     host = make_host()
     activate(host)
     [provider] = host.model_providers
-    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code login"):
+    with pytest.raises(UserError, match="Sign in to Claude Code first: /login claude"):
         provider.resolve("claude-opus-5-5")
 
     store = ClaudeCodeTokenStore()  # `auto` without a keychain, as in these tests, is the file
@@ -150,6 +151,26 @@ async def test_command_signs_in_reports_and_signs_out(monkeypatch: pytest.Monkey
     assert ClaudeCodeTokenStore().load() is None
     with pytest.raises(ValueError, match="Usage: /claude_code"):
         await run(host, "bogus")
+
+
+async def test_login_claude_signs_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(clai2, "login", fake_login)
+    host = make_host()
+    activate(host)
+    [login] = host.logins
+    assert (await login.handler()).startswith("Signed in to Claude Code.")
+    assert URL in output(host)
+    assert (await run(host, "status")).startswith("Signed in to Claude Code;")
+
+
+async def test_a_clai2_without_host_login_keeps_claude_code_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delattr(PluginHost, "login")
+    host = make_host()
+    activate(host)
+    assert (await run(host, "status")).endswith("Run /claude_code login.")
+    [provider] = host.model_providers
+    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code login"):
+        provider.resolve("claude-opus-5-5")
 
 
 async def test_bare_command_opens_the_settings_menu(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -243,7 +264,7 @@ async def test_clai2_runs_the_package_folder_as_a_drop_in(
 ) -> None:
     """Copy the package folder into the plugins folder, as the README says; a CLAI2 turn runs through it."""
     ClaudeCodeTokenStore().save(CREDS)
-    prompts = ["/plugins list", "hi", "/exit"]
+    prompts = ["/plugins list", "/login nope", "hi", "/exit"]
 
     class Prompt(Generic[PromptT]):  # CLAI2 builds `PromptSession[str]`
         def __init__(self, **kwargs: object) -> None:
@@ -271,6 +292,7 @@ async def test_clai2_runs_the_package_folder_as_a_drop_in(
     )
 
     assert f"claude_code: {drop_in / '__init__.py'} (enabled, loaded)" in shown.getvalue()
+    assert "Usage: /login [codex|copilot|claude]" in shown.getvalue()
     assert TEXT in shown.getvalue()
     assert messages_stub.received["model"] == "claude-opus-5-5"
     loaded = {
