@@ -35,6 +35,7 @@ def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[P
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("CLAUDE_CODE_NO_UPDATE_CHECK", "1")  # tests that want it point it at `messages_stub`
     yield tmp_path
     keyring.set_keyring(previous)
 
@@ -57,11 +58,15 @@ def _stream_events() -> list[dict[str, object]]:
 
 
 class MessagesServer(ThreadingHTTPServer):
-    """Records the last Messages request body and its headers; `/oauth/token` answers `token_status`."""
+    """Records the last Messages request body and its headers; `/oauth/token` answers `token_status`.
+
+    A GET answers like PyPI's JSON API, with `release` as the latest version.
+    """
 
     received: dict[str, object]
     headers: dict[str, str]
     token_status = 400
+    release = "0.0.0"
 
     @property
     def url(self) -> str:
@@ -70,6 +75,12 @@ class MessagesServer(ThreadingHTTPServer):
 
 class _MessagesStub(BaseHTTPRequestHandler):
     server: MessagesServer
+
+    def do_GET(self) -> None:  # noqa: N802
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"info": {"version": self.server.release}}).encode())
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", 0))

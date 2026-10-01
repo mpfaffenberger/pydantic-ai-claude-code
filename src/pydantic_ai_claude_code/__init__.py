@@ -31,6 +31,9 @@ from .storage import ClaudeCodeTokenStore, KeyringTokenStore, default_auth_path,
 if TYPE_CHECKING:
     from pydantic_clai2.plugins import DepsT, PluginHost
 
+__version__ = "0.5.0"
+"""Matches `version` in pyproject.toml (a test checks), so a copied folder knows its release."""
+
 
 def activate(host: PluginHost[DepsT]) -> None:
     """CLAI2's plugin entry point; imported lazily so plain Pydantic AI use never needs CLAI2."""
@@ -47,6 +50,7 @@ __all__ = [
     "ClaudeCodeSignInExpiredError",
     "ClaudeCodeTokenStore",
     "KeyringTokenStore",
+    "__version__",
     "activate",
     "default_auth_path",
     "default_store",
