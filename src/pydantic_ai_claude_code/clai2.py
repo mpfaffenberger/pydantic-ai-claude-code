@@ -14,16 +14,17 @@ Plugin settings, which are plaintext SQLite, hold only the storage choice.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable, Sequence
 from typing import get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic_ai.exceptions import UserError
 from pydantic_clai2.commands import Command
-from pydantic_clai2.plugins import DepsT, PluginHost
+from pydantic_clai2.plugins import DepsT, PluginHost, SessionEnd, SessionStart, TurnEnd
 from pydantic_clai2.ui.menus.field_menu import TERMINAL, FieldMenu, FieldRow, Runners, first_error, run_flow_async
 
-from . import config
+from . import __version__, config, updates
 from .flow import login
 from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
@@ -192,6 +193,32 @@ async def configure(source: ClaudeCodeConfig, show_url: Callable[[str], None], r
     return "\n".join(messages) or "Claude Code settings unchanged."
 
 
+def _accepts(method: Callable[..., object], keyword: str) -> bool:
+    """Whether this CLAI2's `method` takes `keyword`; `settings_from` and `models` came in pydantic-ai#9558."""
+    return keyword in inspect.signature(method).parameters
+
+
+def watch_for_updates(host: PluginHost[DepsT]) -> None:
+    """Check PyPI for a newer release as CLAI2 starts, and say so after a turn, so startup never waits."""
+    if not updates.enabled():
+        return
+    checks: list[asyncio.Task[str | None]] = []
+
+    @host.on("session_start")
+    async def start_check(event: SessionStart) -> None:
+        checks.append(asyncio.create_task(updates.newer_release(__version__)))
+
+    @host.on("turn_end")
+    async def mention_update(event: TurnEnd) -> None:
+        if checks and checks[0].done() and (latest := checks.pop().result()) is not None:
+            host.console.print(updates.notice(__version__, latest), markup=False, soft_wrap=True)
+
+    @host.on("session_end")
+    async def stop_check(event: SessionEnd) -> None:
+        for check in checks:
+            check.cancel()
+
+
 def activate(host: PluginHost[DepsT]) -> None:
     """Register `claude-code:` models, `/login claude` where CLAI2 supports it, the settings menu, and `/claude_code`."""
     if not hasattr(host, "model_provider"):
@@ -207,7 +234,14 @@ def activate(host: PluginHost[DepsT]) -> None:
         sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND} login",
     )
     providers = Providers()
-    host.model_provider(PREFIX, lambda name: providers.model(name, source), models=config.MODELS)
+
+    def resolve(name: str) -> ClaudeCodeModel:
+        return providers.model(name, source)
+
+    if _accepts(host.model_provider, "settings_from"):
+        provider = host.model_provider(PREFIX, resolve, models=config.MODELS, settings_from="anthropic")
+    else:
+        provider = host.model_provider(PREFIX, resolve, models=config.MODELS)
 
     def show_url(url: str) -> None:
         host.console.print(
@@ -217,7 +251,11 @@ def activate(host: PluginHost[DepsT]) -> None:
         )
 
     if has_login:
-        host.login(LOGIN, lambda: sign_in(source, show_url))
+        if _accepts(host.login, "models"):
+            host.login(LOGIN, lambda: sign_in(source, show_url), models=provider.names)
+        else:
+            host.login(LOGIN, lambda: sign_in(source, show_url))
+    watch_for_updates(host)
 
     @host.configure
     async def settings_menu() -> str:

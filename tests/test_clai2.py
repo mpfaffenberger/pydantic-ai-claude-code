@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import io
 import shutil
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Generic, TypeVar, cast
 
@@ -18,7 +19,8 @@ from pydantic_clai2 import chat
 from pydantic_clai2.commands import Command
 from pydantic_clai2.config import Settings
 from pydantic_clai2.config.settings_store import SettingsStore
-from pydantic_clai2.plugins import PluginHost
+from pydantic_ai.models import Model
+from pydantic_clai2.plugins import ModelProvider, PluginHost, PluginLogin, SessionEnd, SessionStart, TurnEnd
 from pydantic_clai2.ui.menus.field_menu import Runners
 from rich.console import Console
 from termflow.tui import MenuItem
@@ -26,7 +28,7 @@ from termflow.tui.menu import Menu, MenuResult
 
 from conftest import TEXT, MessagesServer
 import pydantic_ai_claude_code
-from pydantic_ai_claude_code import clai2, config, storage
+from pydantic_ai_claude_code import clai2, config, storage, updates
 from pydantic_ai_claude_code.clai2 import (
     SIGNED_IN,
     SIGNED_OUT,
@@ -100,7 +102,10 @@ def test_activate_registers_the_prefix_the_login_the_menu_and_the_command() -> N
     [provider] = host.model_providers
     assert provider.prefix == "claude-code"
     assert provider.names == tuple(f"claude-code:{name}" for name in config.MODELS)
-    assert [login.name for login in host.logins] == ["claude"]
+    assert provider.settings_from == "anthropic"
+    [login] = host.logins
+    assert login.name == "claude"
+    assert login.models == provider.names, "signing in adds every listed model"
     assert host.configurer is not None
     assert list(command(host).complete(["log"])) == ["login", "logout"]
     assert list(command(host).complete(["status", "x"])) == []
@@ -161,6 +166,57 @@ async def test_login_claude_signs_in(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (await login.handler()).startswith("Signed in to Claude Code.")
     assert URL in output(host)
     assert (await run(host, "status")).startswith("Signed in to Claude Code;")
+
+
+def test_a_clai2_without_settings_from_or_login_models_still_loads(monkeypatch: pytest.MonkeyPatch) -> None:
+    model_provider, login = PluginHost.model_provider, PluginHost.login
+
+    def old_model_provider(
+        self: PluginHost[None], prefix: str, resolve: Callable[[str], Model], /, *, models: Iterable[str] = ()
+    ) -> ModelProvider:
+        return model_provider(self, prefix, resolve, models=models)
+
+    def old_login(self: PluginHost[None], name: str, handler: Callable[[], Awaitable[str]], /) -> PluginLogin:
+        return login(self, name, handler)
+
+    monkeypatch.setattr(PluginHost, "model_provider", old_model_provider)
+    monkeypatch.setattr(PluginHost, "login", old_login)
+    host = make_host()
+    activate(host)
+    [provider] = host.model_providers
+    assert provider.settings_from is None
+    assert [login.models for login in host.logins] == [()]
+
+
+async def fire(host: PluginHost[None], event: SessionStart | TurnEnd | SessionEnd) -> None:
+    for handler in host.handlers:
+        await handler(event)
+
+
+async def test_an_update_is_mentioned_once_after_a_turn(
+    messages_stub: MessagesServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_NO_UPDATE_CHECK")
+    monkeypatch.setattr(updates, "RELEASES_URL", messages_stub.url)
+    messages_stub.release = "99.0.0"
+    host = make_host()
+    activate(host)
+    await fire(host, SessionStart(agent=Agent("test"), settings=Settings()))
+    turn = TurnEnd(text="hi", outcome="completed")
+    for _ in range(200):
+        await fire(host, turn)
+        if "99.0.0" in output(host):
+            break
+        await asyncio.sleep(0.01)
+    await fire(host, turn)
+    assert output(host).count("Claude Code plugin 99.0.0 is out") == 1
+    await fire(host, SessionEnd(reason="exit"))
+
+
+async def test_the_update_check_can_be_turned_off() -> None:
+    host = make_host()
+    activate(host)
+    assert host.handlers == [], "no session hooks without the check"
 
 
 async def test_a_clai2_without_host_login_keeps_claude_code_login(monkeypatch: pytest.MonkeyPatch) -> None:
