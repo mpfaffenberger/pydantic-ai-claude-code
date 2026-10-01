@@ -76,5 +76,5 @@ def test_says_what_to_do_when_pypi_has_no_answer(fake_curl: Path) -> None:
     (fake_curl / "releases.json").write_text("")
     done = install(fake_curl, check=False)
     assert done.returncode == 1
-    assert "Pass a tag (sh -s -- v0.5.0) or main." in done.stderr
+    assert "Pass a tag (sh -s -- v0.6.0) or main." in done.stderr
     assert not (fake_curl / "pydantic-clai2").exists()

@@ -1,7 +1,7 @@
 """The CLAI2 plugin: chat with your Claude Code subscription as `claude-code:MODEL`.
 
 Install it by copying this package's folder into CLAI2's plugins folder as `claude_code/`; CLAI2 loads it at
-startup through the package's `activate`. Everything it imports already ships with CLAI2, and it uses only
+startup through the `ClaudeCodePlugin` the package's `__init__.py` declares. Everything it imports already ships with CLAI2, and it uses only
 relative imports, so the copy runs on its own. `/login claude` signs in through the browser, and `/claude_code`
 (or `C` in `/plugins`) opens the settings menu: sign in, sign out, and choose where the sign-in is kept. Then
 pick a model in `/add_model` > `claude-code`.
@@ -14,14 +14,13 @@ Plugin settings, which are plaintext SQLite, hold only the storage choice.
 from __future__ import annotations
 
 import asyncio
-import inspect
 from collections.abc import Callable, Sequence
 from typing import get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic_ai.exceptions import UserError
 from pydantic_clai2.commands import Command
-from pydantic_clai2.plugins import DepsT, PluginHost, SessionEnd, SessionStart, TurnEnd
+from pydantic_clai2.plugins import ModelProvider, Plugin, PluginHost, PluginLogin, SessionEnd, SessionStart, TurnEnd
 from pydantic_clai2.ui.menus.field_menu import TERMINAL, FieldMenu, FieldRow, Runners, first_error, run_flow_async
 
 from . import __version__, config, updates
@@ -37,7 +36,7 @@ COMMAND = "claude_code"
 """CLAI2 command names are Python identifiers, so the command cannot share the prefix's hyphen."""
 
 LOGIN = "claude"
-"""`/login claude` signs in, on a CLAI2 with `host.login`."""
+"""`/login claude` signs in."""
 
 SIGNED_IN = "signed in"
 SIGNED_OUT = "not signed in"
@@ -69,12 +68,9 @@ class ClaudeCodeConfig:
         self,
         settings: ClaudeCodeSettings,
         save: Callable[[ClaudeCodeSettings], None],
-        *,
-        sign_in_command: str = f"/login {LOGIN}",
     ) -> None:
-        """`save` persists new settings, as `host.save_settings` does; messages point at `sign_in_command`."""
+        """`save` persists new settings, as `host.save_settings` does."""
         self.settings = settings
-        self.sign_in_command = sign_in_command
         self._save = save
 
     def store(self) -> TokenStore:
@@ -151,7 +147,7 @@ class Providers:
         store = token_store(backend)
         credentials = store.load()
         if credentials is None:
-            raise UserError(f"Sign in to Claude Code first: {source.sign_in_command}.")
+            raise UserError(f"Sign in to Claude Code first: /login {LOGIN}.")
         provider = self._cached.get(backend)
         if provider is None or provider.credentials != credentials:
             provider = self._cached[backend] = ClaudeCodeProvider(credentials, store=store)
@@ -163,7 +159,7 @@ def status(source: ClaudeCodeConfig) -> str:
     store = source.store()
     where = f"the file {store.path}" if isinstance(store, ClaudeCodeTokenStore) else "the OS keyring"
     if store.load() is None:
-        return f"Not signed in (sign-in would be kept in {where}). Run {source.sign_in_command}."
+        return f"Not signed in (sign-in would be kept in {where}). Run /login {LOGIN}."
     return f"Signed in to Claude Code; tokens are kept in {where}."
 
 
@@ -193,92 +189,78 @@ async def configure(source: ClaudeCodeConfig, show_url: Callable[[str], None], r
     return "\n".join(messages) or "Claude Code settings unchanged."
 
 
-def _accepts(method: Callable[..., object], keyword: str) -> bool:
-    """Whether this CLAI2's `method` takes `keyword`; `settings_from` and `models` came in pydantic-ai#9558."""
-    return keyword in inspect.signature(method).parameters
+class ClaudeCodePlugin(Plugin[ClaudeCodeSettings]):
+    """`claude-code:` models, `/login claude`, the settings menu, `/claude_code`, and the update notice."""
 
-
-def watch_for_updates(host: PluginHost[DepsT]) -> None:
-    """Check PyPI for a newer release as CLAI2 starts, and say so after a turn, so startup never waits."""
-    if not updates.enabled():
-        return
-    checks: list[asyncio.Task[str | None]] = []
-
-    @host.on("session_start")
-    async def start_check(event: SessionStart) -> None:
-        checks.append(asyncio.create_task(updates.newer_release(__version__)))
-
-    @host.on("turn_end")
-    async def mention_update(event: TurnEnd) -> None:
-        if checks and checks[0].done() and (latest := checks.pop().result()) is not None:
-            host.console.print(updates.notice(__version__, latest), markup=False, soft_wrap=True)
-
-    @host.on("session_end")
-    async def stop_check(event: SessionEnd) -> None:
-        for check in checks:
-            check.cancel()
-
-
-def activate(host: PluginHost[DepsT]) -> None:
-    """Register `claude-code:` models, `/login claude` where CLAI2 supports it, the settings menu, and `/claude_code`."""
-    if not hasattr(host, "model_provider"):
-        raise RuntimeError(
-            "This pydantic-clai2 cannot run plugin models. Upgrade to a release after 0.52.0, or until one is "
-            "out, run `uv run clai2` from a checkout of https://github.com/pydantic/pydantic-ai main."
+    def __init__(self, host: PluginHost, settings: ClaudeCodeSettings) -> None:
+        """Build the provider and the menu's source once; CLAI2 loads the plugin again when settings change."""
+        super().__init__(host, settings)
+        self.source = ClaudeCodeConfig(settings, host.save_settings)
+        self._providers = Providers()
+        self._update: asyncio.Task[str | None] | None = None
+        self.provider = ModelProvider(
+            prefix=PREFIX, resolve=self._resolve, models=config.MODELS, settings_from="anthropic"
         )
-    # `host.login` (pydantic/pydantic-ai#9485) came after `model_provider`; older hosts sign in from the menu.
-    has_login = hasattr(host, "login")
-    source = ClaudeCodeConfig(
-        host.settings(ClaudeCodeSettings),
-        host.save_settings,
-        sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND}, then Sign-in",
-    )
-    providers = Providers()
 
-    def resolve(name: str) -> ClaudeCodeModel:
-        return providers.model(name, source)
+    def _resolve(self, name: str) -> ClaudeCodeModel:
+        return self._providers.model(name, self.source)
 
-    if _accepts(host.model_provider, "settings_from"):
-        provider = host.model_provider(PREFIX, resolve, models=config.MODELS, settings_from="anthropic")
-    else:
-        provider = host.model_provider(PREFIX, resolve, models=config.MODELS)
-
-    def show_url(url: str) -> None:
-        host.console.print(
+    def _show_url(self, url: str) -> None:
+        self.host.console.print(
             f"Opening your browser to sign in to Claude Code. If it does not open, visit:\n{url}",
             markup=False,
             soft_wrap=True,
         )
 
-    if has_login:
-        if _accepts(host.login, "models"):
-            host.login(LOGIN, lambda: sign_in(source, show_url), models=provider.names)
-        else:
-            host.login(LOGIN, lambda: sign_in(source, show_url))
-    watch_for_updates(host)
+    def get_model_providers(self) -> Sequence[ModelProvider]:
+        return (self.provider,)
 
-    @host.configure
-    async def settings_menu() -> str:
-        return await configure(source, show_url)
+    def get_logins(self) -> Sequence[PluginLogin]:
+        return (PluginLogin(name=LOGIN, handler=self._sign_in, models=self.provider.names),)
 
-    async def command(args: list[str]) -> str:
-        if not args:
-            return await settings_menu()
-        if args == ["logout"]:
-            return await asyncio.to_thread(sign_out, source)
-        if args == ["status"]:
-            return await asyncio.to_thread(status, source)
-        raise ValueError(_HELP)
+    async def _sign_in(self) -> str:
+        return await sign_in(self.source, self._show_url)
 
-    host.commands.register(
-        Command(
-            name=COMMAND,
-            description=f"Claude Code settings: sign-in, credential storage, logout, and status. Sign in with /login {LOGIN}.",
-            handler=command,
-            complete=lambda args: (
-                [word for word in ("logout", "status") if word.startswith(args[0] if args else "")]
-                if len(args) <= 1
-                else []
+    def get_commands(self) -> Sequence[Command]:
+        return (
+            Command(
+                name=COMMAND,
+                description=f"Claude Code settings: sign-in, credential storage, logout, and status. "
+                f"Sign in with /login {LOGIN}.",
+                handler=self._command,
+                complete=lambda args: (
+                    [word for word in ("logout", "status") if word.startswith(args[0] if args else "")]
+                    if len(args) <= 1
+                    else []
+                ),
             ),
         )
-    )
+
+    async def _command(self, args: list[str]) -> str:
+        if not args:
+            return await self.configure()
+        if args == ["logout"]:
+            return await asyncio.to_thread(sign_out, self.source)
+        if args == ["status"]:
+            return await asyncio.to_thread(status, self.source)
+        raise ValueError(_HELP)
+
+    async def configure(self) -> str:
+        return await configure(self.source, self._show_url)
+
+    async def on_session_start(self, event: SessionStart) -> None:
+        """Check PyPI for a newer release in the background, so startup never waits on it."""
+        if updates.enabled():
+            self._update = asyncio.create_task(updates.newer_release(__version__))
+
+    async def on_turn_end(self, event: TurnEnd) -> None:
+        """Mention a newer release once, after the first turn that finishes once the check is done."""
+        if self._update is None or not self._update.done():
+            return
+        latest, self._update = self._update.result(), None
+        if latest is not None:
+            self.host.console.print(updates.notice(__version__, latest), markup=False, soft_wrap=True)
+
+    async def on_session_end(self, event: SessionEnd) -> None:
+        if self._update is not None:
+            self._update.cancel()

@@ -1,7 +1,7 @@
 """Use your Claude Code subscription from a Pydantic AI Agent, or as a CLAI2 plugin.
 
 This folder is also a complete CLAI2 drop-in plugin: copy it into CLAI2's plugins folder as `claude_code/`
-and CLAI2 calls `activate` below. It needs nothing CLAI2 does not already install.
+and CLAI2 loads `ClaudeCodePlugin` below. It needs nothing CLAI2 does not already install.
 
 Quick start:
 
@@ -12,8 +12,6 @@ Quick start:
 """
 
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 from .auth import ClaudeCodeSignInExpiredError
 from .credentials import ClaudeCodeCredentials
@@ -28,18 +26,19 @@ from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
 from .storage import ClaudeCodeTokenStore, KeyringTokenStore, default_auth_path, default_store
 
-if TYPE_CHECKING:
-    from pydantic_clai2.plugins import DepsT, PluginHost
-
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 """Matches `version` in pyproject.toml (a test checks), so a copied folder knows its release."""
 
 
-def activate(host: PluginHost[DepsT]) -> None:
-    """CLAI2's plugin entry point; imported lazily so plain Pydantic AI use never needs CLAI2."""
-    from .clai2 import activate as activate_plugin
+try:
+    from .clai2 import ClaudeCodePlugin as _ClaudeCodePlugin
+except ModuleNotFoundError as error:  # plain Pydantic AI use: CLAI2 is not installed, and needs no plugin
+    if not (error.name or "").startswith("pydantic_clai2"):
+        raise
+else:
 
-    activate_plugin(host)
+    class ClaudeCodePlugin(_ClaudeCodePlugin):
+        """The CLAI2 plugin, declared here because CLAI2 loads the `Plugin` a drop-in's `__init__.py` defines."""
 
 
 __all__ = [
@@ -51,7 +50,6 @@ __all__ = [
     "ClaudeCodeTokenStore",
     "KeyringTokenStore",
     "__version__",
-    "activate",
     "default_auth_path",
     "default_store",
     "exchange_code",
