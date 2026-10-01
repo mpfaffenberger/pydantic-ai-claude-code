@@ -14,16 +14,17 @@ Plugin settings, which are plaintext SQLite, hold only the storage choice.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable, Sequence
 from typing import get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic_ai.exceptions import UserError
 from pydantic_clai2.commands import Command
-from pydantic_clai2.plugins import DepsT, PluginHost
+from pydantic_clai2.plugins import DepsT, PluginHost, SessionEnd, SessionStart, TurnEnd
 from pydantic_clai2.ui.menus.field_menu import TERMINAL, FieldMenu, FieldRow, Runners, first_error, run_flow_async
 
-from . import config
+from . import __version__, config, updates
 from .flow import login
 from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
@@ -40,7 +41,7 @@ LOGIN = "claude"
 
 SIGNED_IN = "signed in"
 SIGNED_OUT = "not signed in"
-_HELP = f"Usage: /{COMMAND} (settings menu), /{COMMAND} login, /{COMMAND} logout, or /{COMMAND} status"
+_HELP = f"Usage: /{COMMAND} (settings menu), /{COMMAND} logout, or /{COMMAND} status. Sign in with /login {LOGIN}."
 
 
 class ClaudeCodeSettings(BaseModel):
@@ -69,7 +70,7 @@ class ClaudeCodeConfig:
         settings: ClaudeCodeSettings,
         save: Callable[[ClaudeCodeSettings], None],
         *,
-        sign_in_command: str = f"/{COMMAND} login",
+        sign_in_command: str = f"/login {LOGIN}",
     ) -> None:
         """`save` persists new settings, as `host.save_settings` does; messages point at `sign_in_command`."""
         self.settings = settings
@@ -150,7 +151,7 @@ class Providers:
         store = token_store(backend)
         credentials = store.load()
         if credentials is None:
-            raise UserError(f"Sign in to Claude Code first: {source.sign_in_command}, or /plugins configure {COMMAND}.")
+            raise UserError(f"Sign in to Claude Code first: {source.sign_in_command}.")
         provider = self._cached.get(backend)
         if provider is None or provider.credentials != credentials:
             provider = self._cached[backend] = ClaudeCodeProvider(credentials, store=store)
@@ -192,6 +193,32 @@ async def configure(source: ClaudeCodeConfig, show_url: Callable[[str], None], r
     return "\n".join(messages) or "Claude Code settings unchanged."
 
 
+def _accepts(method: Callable[..., object], keyword: str) -> bool:
+    """Whether this CLAI2's `method` takes `keyword`; `settings_from` and `models` came in pydantic-ai#9558."""
+    return keyword in inspect.signature(method).parameters
+
+
+def watch_for_updates(host: PluginHost[DepsT]) -> None:
+    """Check PyPI for a newer release as CLAI2 starts, and say so after a turn, so startup never waits."""
+    if not updates.enabled():
+        return
+    checks: list[asyncio.Task[str | None]] = []
+
+    @host.on("session_start")
+    async def start_check(event: SessionStart) -> None:
+        checks.append(asyncio.create_task(updates.newer_release(__version__)))
+
+    @host.on("turn_end")
+    async def mention_update(event: TurnEnd) -> None:
+        if checks and checks[0].done() and (latest := checks.pop().result()) is not None:
+            host.console.print(updates.notice(__version__, latest), markup=False, soft_wrap=True)
+
+    @host.on("session_end")
+    async def stop_check(event: SessionEnd) -> None:
+        for check in checks:
+            check.cancel()
+
+
 def activate(host: PluginHost[DepsT]) -> None:
     """Register `claude-code:` models, `/login claude` where CLAI2 supports it, the settings menu, and `/claude_code`."""
     if not hasattr(host, "model_provider"):
@@ -199,15 +226,22 @@ def activate(host: PluginHost[DepsT]) -> None:
             "This pydantic-clai2 cannot run plugin models. Upgrade to a release after 0.52.0, or until one is "
             "out, run `uv run clai2` from a checkout of https://github.com/pydantic/pydantic-ai main."
         )
-    # `host.login` (pydantic/pydantic-ai#9485) came after `model_provider`; older hosts keep `/claude_code login`.
+    # `host.login` (pydantic/pydantic-ai#9485) came after `model_provider`; older hosts sign in from the menu.
     has_login = hasattr(host, "login")
     source = ClaudeCodeConfig(
         host.settings(ClaudeCodeSettings),
         host.save_settings,
-        sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND} login",
+        sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND}, then Sign-in",
     )
     providers = Providers()
-    host.model_provider(PREFIX, lambda name: providers.model(name, source), models=config.MODELS)
+
+    def resolve(name: str) -> ClaudeCodeModel:
+        return providers.model(name, source)
+
+    if _accepts(host.model_provider, "settings_from"):
+        provider = host.model_provider(PREFIX, resolve, models=config.MODELS, settings_from="anthropic")
+    else:
+        provider = host.model_provider(PREFIX, resolve, models=config.MODELS)
 
     def show_url(url: str) -> None:
         host.console.print(
@@ -217,7 +251,11 @@ def activate(host: PluginHost[DepsT]) -> None:
         )
 
     if has_login:
-        host.login(LOGIN, lambda: sign_in(source, show_url))
+        if _accepts(host.login, "models"):
+            host.login(LOGIN, lambda: sign_in(source, show_url), models=provider.names)
+        else:
+            host.login(LOGIN, lambda: sign_in(source, show_url))
+    watch_for_updates(host)
 
     @host.configure
     async def settings_menu() -> str:
@@ -226,8 +264,6 @@ def activate(host: PluginHost[DepsT]) -> None:
     async def command(args: list[str]) -> str:
         if not args:
             return await settings_menu()
-        if args == ["login"]:
-            return await sign_in(source, show_url)
         if args == ["logout"]:
             return await asyncio.to_thread(sign_out, source)
         if args == ["status"]:
@@ -237,10 +273,10 @@ def activate(host: PluginHost[DepsT]) -> None:
     host.commands.register(
         Command(
             name=COMMAND,
-            description="Claude Code subscription: sign in, sign out, and credential storage (login, logout, status).",
+            description=f"Claude Code settings: sign-in, credential storage, logout, and status. Sign in with /login {LOGIN}.",
             handler=command,
             complete=lambda args: (
-                [word for word in ("login", "logout", "status") if word.startswith(args[0] if args else "")]
+                [word for word in ("logout", "status") if word.startswith(args[0] if args else "")]
                 if len(args) <= 1
                 else []
             ),

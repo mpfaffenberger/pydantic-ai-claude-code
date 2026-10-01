@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import io
 import shutil
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Generic, TypeVar, cast
 
@@ -18,7 +19,8 @@ from pydantic_clai2 import chat
 from pydantic_clai2.commands import Command
 from pydantic_clai2.config import Settings
 from pydantic_clai2.config.settings_store import SettingsStore
-from pydantic_clai2.plugins import PluginHost
+from pydantic_ai.models import Model
+from pydantic_clai2.plugins import ModelProvider, PluginHost, PluginLogin, SessionEnd, SessionStart, TurnEnd
 from pydantic_clai2.ui.menus.field_menu import Runners
 from rich.console import Console
 from termflow.tui import MenuItem
@@ -26,7 +28,7 @@ from termflow.tui.menu import Menu, MenuResult
 
 from conftest import TEXT, MessagesServer
 import pydantic_ai_claude_code
-from pydantic_ai_claude_code import clai2, config, storage
+from pydantic_ai_claude_code import clai2, config, storage, updates
 from pydantic_ai_claude_code.clai2 import (
     SIGNED_IN,
     SIGNED_OUT,
@@ -100,9 +102,12 @@ def test_activate_registers_the_prefix_the_login_the_menu_and_the_command() -> N
     [provider] = host.model_providers
     assert provider.prefix == "claude-code"
     assert provider.names == tuple(f"claude-code:{name}" for name in config.MODELS)
-    assert [login.name for login in host.logins] == ["claude"]
+    assert provider.settings_from == "anthropic"
+    [login] = host.logins
+    assert login.name == "claude"
+    assert login.models == provider.names, "signing in adds every listed model"
     assert host.configurer is not None
-    assert list(command(host).complete(["log"])) == ["login", "logout"]
+    assert list(command(host).complete(["lo"])) == ["logout"]
     assert list(command(host).complete(["status", "x"])) == []
 
 
@@ -132,13 +137,16 @@ def test_resolve_needs_a_sign_in_and_reuses_the_provider_until_it_changes() -> N
     assert isinstance(renewed, ClaudeCodeModel) and renewed.client is not opus.client
 
 
-async def test_command_signs_in_reports_and_signs_out(monkeypatch: pytest.MonkeyPatch, isolated_home: Path) -> None:
+async def test_login_claude_then_the_command_reports_and_signs_out(
+    monkeypatch: pytest.MonkeyPatch, isolated_home: Path
+) -> None:
     monkeypatch.setattr(clai2, "login", fake_login)
     host = make_host()
     activate(host)
     assert (await run(host, "status")).startswith("Not signed in (sign-in would be kept in the file ")
 
-    message = await run(host, "login")
+    [login] = host.logins
+    message = await login.handler()
     assert message == (
         "Signed in to Claude Code. Choose a model in /add_model > claude-code, or run /model claude-code:claude-opus-5-5."
     )
@@ -149,8 +157,9 @@ async def test_command_signs_in_reports_and_signs_out(monkeypatch: pytest.Monkey
 
     assert (await run(host, "logout")).startswith("Signed out of Claude Code.")
     assert ClaudeCodeTokenStore().load() is None
-    with pytest.raises(ValueError, match="Usage: /claude_code"):
-        await run(host, "bogus")
+    for retired in ("login", "bogus"):
+        with pytest.raises(ValueError, match="Usage: /claude_code .*Sign in with /login claude"):
+            await run(host, retired)
 
 
 async def test_login_claude_signs_in(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,13 +172,64 @@ async def test_login_claude_signs_in(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (await run(host, "status")).startswith("Signed in to Claude Code;")
 
 
-async def test_a_clai2_without_host_login_keeps_claude_code_login(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_clai2_without_settings_from_or_login_models_still_loads(monkeypatch: pytest.MonkeyPatch) -> None:
+    model_provider, login = PluginHost.model_provider, PluginHost.login
+
+    def old_model_provider(
+        self: PluginHost[None], prefix: str, resolve: Callable[[str], Model], /, *, models: Iterable[str] = ()
+    ) -> ModelProvider:
+        return model_provider(self, prefix, resolve, models=models)
+
+    def old_login(self: PluginHost[None], name: str, handler: Callable[[], Awaitable[str]], /) -> PluginLogin:
+        return login(self, name, handler)
+
+    monkeypatch.setattr(PluginHost, "model_provider", old_model_provider)
+    monkeypatch.setattr(PluginHost, "login", old_login)
+    host = make_host()
+    activate(host)
+    [provider] = host.model_providers
+    assert provider.settings_from is None
+    assert [login.models for login in host.logins] == [()]
+
+
+async def fire(host: PluginHost[None], event: SessionStart | TurnEnd | SessionEnd) -> None:
+    for handler in host.handlers:
+        await handler(event)
+
+
+async def test_an_update_is_mentioned_once_after_a_turn(
+    messages_stub: MessagesServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_NO_UPDATE_CHECK")
+    monkeypatch.setattr(updates, "RELEASES_URL", messages_stub.url)
+    messages_stub.release = "99.0.0"
+    host = make_host()
+    activate(host)
+    await fire(host, SessionStart(agent=Agent("test"), settings=Settings()))
+    turn = TurnEnd(text="hi", outcome="completed")
+    for _ in range(200):
+        await fire(host, turn)
+        if "99.0.0" in output(host):
+            break
+        await asyncio.sleep(0.01)
+    await fire(host, turn)
+    assert output(host).count("Claude Code plugin 99.0.0 is out") == 1
+    await fire(host, SessionEnd(reason="exit"))
+
+
+async def test_the_update_check_can_be_turned_off() -> None:
+    host = make_host()
+    activate(host)
+    assert host.handlers == [], "no session hooks without the check"
+
+
+async def test_a_clai2_without_host_login_points_at_the_settings_menu(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delattr(PluginHost, "login")
     host = make_host()
     activate(host)
-    assert (await run(host, "status")).endswith("Run /claude_code login.")
+    assert (await run(host, "status")).endswith("Run /claude_code, then Sign-in.")
     [provider] = host.model_providers
-    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code login"):
+    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code, then Sign-in"):
         provider.resolve("claude-opus-5-5")
 
 
@@ -197,7 +257,7 @@ async def test_menu_switches_storage_then_signs_in(monkeypatch: pytest.MonkeyPat
     assert saved == [ClaudeCodeSettings(credentials="file")]
     assert message.splitlines() == [
         "Claude Code credential storage: File (0600). "
-        f"Not signed in (sign-in would be kept in the file {ClaudeCodeTokenStore().path}). Run /claude_code login.",
+        f"Not signed in (sign-in would be kept in the file {ClaudeCodeTokenStore().path}). Run /login claude.",
         "Signed in to Claude Code. Choose a model in /add_model > claude-code, or run /model claude-code:claude-opus-5-5.",
     ]
     assert urls == [URL]

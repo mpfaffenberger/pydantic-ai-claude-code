@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pydantic-claude-code"
-version = "0.4.0"
+version = "0.5.0"
 description = "Use your Claude Code subscription from a Pydantic AI Agent or CLAI2, with full tool support"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -55,11 +55,12 @@ dev = [
     "pyright>=1.1.400",
 ]
 
-# Until a pydantic-clai2 release includes pydantic/pydantic-ai#9468 (`host.model_provider`) and #9485
-# (`host.login`), develop and test the plugin against #9485's merge commit on main. CLAI2 pins Pydantic AI and the
-# harness to its own build, so all four come from the same commit. Remove this table once a release has both.
+# Until a pydantic-clai2 release includes pydantic/pydantic-ai#9468 (`host.model_provider`), #9485 (`host.login`),
+# and #9558 (`login(models=...)`, `model_provider(settings_from=...)`), develop and test the plugin against #9558's
+# commit. CLAI2 pins Pydantic AI and the harness to its own build, so all four come from the same commit. Remove this
+# table once a release has all three; the plugin itself still runs on CLAIs with only #9468.
 [tool.uv.sources]
-pydantic-clai2 = { git = "https://github.com/pydantic/pydantic-ai", rev = "9f1d49ed8e8a4c1134b97326791db4cc076fc52f", subdirectory = "src/pydantic_clai2" }
-pydantic-ai-harness = { git = "https://github.com/pydantic/pydantic-ai", rev = "9f1d49ed8e8a4c1134b97326791db4cc076fc52f", subdirectory = "src/pydantic_ai_harness" }
-pydantic-ai-slim = { git = "https://github.com/pydantic/pydantic-ai", rev = "9f1d49ed8e8a4c1134b97326791db4cc076fc52f", subdirectory = "pydantic_ai_slim" }
-pydantic-graph = { git = "https://github.com/pydantic/pydantic-ai", rev = "9f1d49ed8e8a4c1134b97326791db4cc076fc52f", subdirectory = "pydantic_graph" }
+pydantic-clai2 = { git = "https://github.com/pydantic/pydantic-ai", rev = "418c3c2453dd8251d30c42084b75c11bd41eac95", subdirectory = "src/pydantic_clai2" }
+pydantic-ai-harness = { git = "https://github.com/pydantic/pydantic-ai", rev = "418c3c2453dd8251d30c42084b75c11bd41eac95", subdirectory = "src/pydantic_ai_harness" }
+pydantic-ai-slim = { git = "https://github.com/pydantic/pydantic-ai", rev = "418c3c2453dd8251d30c42084b75c11bd41eac95", subdirectory = "pydantic_ai_slim" }
+pydantic-graph = { git = "https://github.com/pydantic/pydantic-ai", rev = "418c3c2453dd8251d30c42084b75c11bd41eac95", subdirectory = "pydantic_graph" }
