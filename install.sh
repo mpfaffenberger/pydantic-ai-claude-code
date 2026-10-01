@@ -1,9 +1,17 @@
 #!/bin/sh
-# Install or update the Claude Code plugin for CLAI2 (pass a tag, such as v0.5.0, to pin a release):
+# Install or update the Claude Code plugin for CLAI2, at the latest release (pass a tag such as v0.5.0, or main):
 #   curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/pydantic-ai-claude-code/main/install.sh | sh
 set -eu
 
-ref="${1:-main}"
+ref="${1:-}"
+if [ -z "$ref" ]; then
+    version=$(curl -fsSL https://pypi.org/pypi/pydantic-claude-code/json | grep -o '"version": *"[^"]*"' | head -n 1 | cut -d '"' -f 4)
+    if [ -z "$version" ]; then
+        echo "Could not look up the latest release on PyPI. Pass a tag (sh -s -- v0.5.0) or main." >&2
+        exit 1
+    fi
+    ref="v$version"
+fi
 plugins="${XDG_CONFIG_HOME:-$HOME/.config}/pydantic-clai2/plugins"
 target="$plugins/claude_code"
 

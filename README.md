@@ -32,14 +32,14 @@ so the stock agent, Coder, and your other plugins all keep working.
 
 ### Install
 
-One line installs the plugin, and running it again updates it:
+One line installs the latest release of the plugin, and running it again updates it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/pydantic-ai-claude-code/main/install.sh | sh
 ```
 
-To pin a release, pass its tag: `... | sh -s -- v0.4.0`. The script downloads
-this repo and copies the `src/pydantic_ai_claude_code` folder into CLAI2's
+To pin a release, pass its tag (`... | sh -s -- v0.5.0`), or pass `main` for
+unreleased changes. The script downloads that version of this repo and copies the `src/pydantic_ai_claude_code` folder into CLAI2's
 plugins folder as `claude_code`, replacing any older copy. Nothing to
 `pip install`: everything the plugin imports (`pydantic-ai` with Anthropic
 support, `httpx2`, `keyring`) already ships with CLAI2.
@@ -61,14 +61,23 @@ Dropped-in plugins load when CLAI2 starts. Inside CLAI2, `/plugins` lists it as
 `claude_code`, where Space turns it off and on. (The shell's `clai2 plugins list`
 shows only plugins added by name, so it won't appear there.)
 
+**Updates:** each time CLAI2 starts, the plugin checks PyPI in the background.
+When a newer release is out, it says so once, after your first reply, with the
+one-liner to update. Being offline is silent. Set `CLAUDE_CODE_NO_UPDATE_CHECK=1`
+to turn the check off.
+
 **CLAI2 version:** the plugin needs `PluginHost.model_provider`
 ([pydantic/pydantic-ai#9468](https://github.com/pydantic/pydantic-ai/pull/9468),
 merged), which the next `pydantic-clai2` release after 0.52.0 includes. On an
 older CLAI2 the plugin fails to load with `This pydantic-clai2 cannot run plugin
 models`. `/login claude` needs `PluginHost.login`
 ([#9485](https://github.com/pydantic/pydantic-ai/pull/9485), also merged); on a
-CLAI2 without it, sign in with `/claude_code login` instead. Until a release has
-both, run CLAI2 from pydantic-ai's `main`:
+CLAI2 without it, sign in with `/claude_code login` instead. Signing in adds
+every Claude model to your model list, and `/model_settings` offers Claude's
+thinking and effort controls, on a CLAI2 with
+[#9558](https://github.com/pydantic/pydantic-ai/pull/9558); older ones still
+work, you just `/add_model` yourself. Until a release has all of this, run
+CLAI2 from pydantic-ai's `main`:
 
 ```bash
 git clone https://github.com/pydantic/pydantic-ai
@@ -89,7 +98,11 @@ the way to sign in on a CLAI2 without `/login claude`.) Or open the settings men
 
 ### Pick a model
 
-Open `/add_model` and choose the `claude-code` provider, or type one directly:
+`/login claude` adds every model in the table above to your model list, so
+`/model` offers them right away, and `/model_settings` sets thinking mode,
+effort, and the rest for each. On an older CLAI2, or for a model that isn't
+listed, open `/add_model` and choose the `claude-code` provider, or type one
+directly:
 
 ```text
 /add_model claude-code:claude-opus-5-5
@@ -269,8 +282,9 @@ uv run pyright
 uv run pytest
 ```
 
-To release, bump `version` in `pyproject.toml`, merge, and push a matching tag
-(`git tag v0.4.0 && git push origin v0.4.0`). The `Publish` workflow tests,
+To release, bump `version` in `pyproject.toml` and `__version__` in
+`src/pydantic_ai_claude_code/__init__.py` (a test checks they match), merge, and
+push a matching tag (`git tag v0.5.0 && git push origin v0.5.0`). The `Publish` workflow tests,
 builds, and uploads it to PyPI with the `PYPI_API_TOKEN` repository secret.
 
 The tests never touch your real keychain or token file. They run against a
