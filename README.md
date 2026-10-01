@@ -72,7 +72,7 @@ merged), which the next `pydantic-clai2` release after 0.52.0 includes. On an
 older CLAI2 the plugin fails to load with `This pydantic-clai2 cannot run plugin
 models`. `/login claude` needs `PluginHost.login`
 ([#9485](https://github.com/pydantic/pydantic-ai/pull/9485), also merged); on a
-CLAI2 without it, sign in with `/claude_code login` instead. Signing in adds
+CLAI2 without it, sign in from the `/claude_code` settings menu instead. Signing in adds
 every Claude model to your model list, and `/model_settings` offers Claude's
 thinking and effort controls, on a CLAI2 with
 [#9558](https://github.com/pydantic/pydantic-ai/pull/9558); older ones still
@@ -92,8 +92,7 @@ at it: `uv tool install pydantic-clai2 --with pydantic-claude-code`, then
 ### Sign in
 
 Run `/login claude`. Your browser opens Claude's sign-in page, and CLAI2
-prints the URL in case it doesn't. (`/claude_code login` does the same, and is
-the way to sign in on a CLAI2 without `/login claude`.) Or open the settings menu with `/claude_code`
+prints the URL in case it doesn't. Or open the settings menu with `/claude_code`
 (or `C` on the plugin in `/plugins`), choose **Sign-in**, and press Enter.
 
 ### Pick a model
@@ -122,7 +121,7 @@ opens it. Every change is saved right away and applies from the next run.
 | Sign-in | Enter signs in through the browser; R signs out | the token store below, never in plugin settings |
 | Credential storage | `auto` (`CLAUDE_CODE_CREDENTIALS`, else keyring, else a file), `keyring`, or `file` | plugin settings (`credentials`) |
 
-`/claude_code login`, `/claude_code logout`, and `/claude_code status` do the
+`/claude_code logout` and `/claude_code status` do the
 same without the menu.
 
 ### Where the sign-in lives

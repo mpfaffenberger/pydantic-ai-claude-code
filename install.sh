@@ -24,4 +24,4 @@ rm -rf "$target"
 mv "$download"/*/src/pydantic_ai_claude_code "$target"
 
 echo "Installed the Claude Code plugin ($ref) to $target."
-echo "Start clai2, sign in with /login claude (or /claude_code login), then /model claude-code:claude-opus-5-5."
+echo "Start clai2, sign in with /login claude, then /model claude-code:claude-opus-5-5."

@@ -41,7 +41,7 @@ LOGIN = "claude"
 
 SIGNED_IN = "signed in"
 SIGNED_OUT = "not signed in"
-_HELP = f"Usage: /{COMMAND} (settings menu), /{COMMAND} login, /{COMMAND} logout, or /{COMMAND} status"
+_HELP = f"Usage: /{COMMAND} (settings menu), /{COMMAND} logout, or /{COMMAND} status. Sign in with /login {LOGIN}."
 
 
 class ClaudeCodeSettings(BaseModel):
@@ -70,7 +70,7 @@ class ClaudeCodeConfig:
         settings: ClaudeCodeSettings,
         save: Callable[[ClaudeCodeSettings], None],
         *,
-        sign_in_command: str = f"/{COMMAND} login",
+        sign_in_command: str = f"/login {LOGIN}",
     ) -> None:
         """`save` persists new settings, as `host.save_settings` does; messages point at `sign_in_command`."""
         self.settings = settings
@@ -151,7 +151,7 @@ class Providers:
         store = token_store(backend)
         credentials = store.load()
         if credentials is None:
-            raise UserError(f"Sign in to Claude Code first: {source.sign_in_command}, or /plugins configure {COMMAND}.")
+            raise UserError(f"Sign in to Claude Code first: {source.sign_in_command}.")
         provider = self._cached.get(backend)
         if provider is None or provider.credentials != credentials:
             provider = self._cached[backend] = ClaudeCodeProvider(credentials, store=store)
@@ -226,12 +226,12 @@ def activate(host: PluginHost[DepsT]) -> None:
             "This pydantic-clai2 cannot run plugin models. Upgrade to a release after 0.52.0, or until one is "
             "out, run `uv run clai2` from a checkout of https://github.com/pydantic/pydantic-ai main."
         )
-    # `host.login` (pydantic/pydantic-ai#9485) came after `model_provider`; older hosts keep `/claude_code login`.
+    # `host.login` (pydantic/pydantic-ai#9485) came after `model_provider`; older hosts sign in from the menu.
     has_login = hasattr(host, "login")
     source = ClaudeCodeConfig(
         host.settings(ClaudeCodeSettings),
         host.save_settings,
-        sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND} login",
+        sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND}, then Sign-in",
     )
     providers = Providers()
 
@@ -264,8 +264,6 @@ def activate(host: PluginHost[DepsT]) -> None:
     async def command(args: list[str]) -> str:
         if not args:
             return await settings_menu()
-        if args == ["login"]:
-            return await sign_in(source, show_url)
         if args == ["logout"]:
             return await asyncio.to_thread(sign_out, source)
         if args == ["status"]:
@@ -275,10 +273,10 @@ def activate(host: PluginHost[DepsT]) -> None:
     host.commands.register(
         Command(
             name=COMMAND,
-            description="Claude Code subscription: sign in, sign out, and credential storage (login, logout, status).",
+            description=f"Claude Code settings: sign-in, credential storage, logout, and status. Sign in with /login {LOGIN}.",
             handler=command,
             complete=lambda args: (
-                [word for word in ("login", "logout", "status") if word.startswith(args[0] if args else "")]
+                [word for word in ("logout", "status") if word.startswith(args[0] if args else "")]
                 if len(args) <= 1
                 else []
             ),

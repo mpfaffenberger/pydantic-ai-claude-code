@@ -107,7 +107,7 @@ def test_activate_registers_the_prefix_the_login_the_menu_and_the_command() -> N
     assert login.name == "claude"
     assert login.models == provider.names, "signing in adds every listed model"
     assert host.configurer is not None
-    assert list(command(host).complete(["log"])) == ["login", "logout"]
+    assert list(command(host).complete(["lo"])) == ["logout"]
     assert list(command(host).complete(["status", "x"])) == []
 
 
@@ -137,13 +137,16 @@ def test_resolve_needs_a_sign_in_and_reuses_the_provider_until_it_changes() -> N
     assert isinstance(renewed, ClaudeCodeModel) and renewed.client is not opus.client
 
 
-async def test_command_signs_in_reports_and_signs_out(monkeypatch: pytest.MonkeyPatch, isolated_home: Path) -> None:
+async def test_login_claude_then_the_command_reports_and_signs_out(
+    monkeypatch: pytest.MonkeyPatch, isolated_home: Path
+) -> None:
     monkeypatch.setattr(clai2, "login", fake_login)
     host = make_host()
     activate(host)
     assert (await run(host, "status")).startswith("Not signed in (sign-in would be kept in the file ")
 
-    message = await run(host, "login")
+    [login] = host.logins
+    message = await login.handler()
     assert message == (
         "Signed in to Claude Code. Choose a model in /add_model > claude-code, or run /model claude-code:claude-opus-5-5."
     )
@@ -154,8 +157,9 @@ async def test_command_signs_in_reports_and_signs_out(monkeypatch: pytest.Monkey
 
     assert (await run(host, "logout")).startswith("Signed out of Claude Code.")
     assert ClaudeCodeTokenStore().load() is None
-    with pytest.raises(ValueError, match="Usage: /claude_code"):
-        await run(host, "bogus")
+    for retired in ("login", "bogus"):
+        with pytest.raises(ValueError, match="Usage: /claude_code .*Sign in with /login claude"):
+            await run(host, retired)
 
 
 async def test_login_claude_signs_in(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,13 +223,13 @@ async def test_the_update_check_can_be_turned_off() -> None:
     assert host.handlers == [], "no session hooks without the check"
 
 
-async def test_a_clai2_without_host_login_keeps_claude_code_login(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_clai2_without_host_login_points_at_the_settings_menu(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delattr(PluginHost, "login")
     host = make_host()
     activate(host)
-    assert (await run(host, "status")).endswith("Run /claude_code login.")
+    assert (await run(host, "status")).endswith("Run /claude_code, then Sign-in.")
     [provider] = host.model_providers
-    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code login"):
+    with pytest.raises(UserError, match="Sign in to Claude Code first: /claude_code, then Sign-in"):
         provider.resolve("claude-opus-5-5")
 
 
@@ -253,7 +257,7 @@ async def test_menu_switches_storage_then_signs_in(monkeypatch: pytest.MonkeyPat
     assert saved == [ClaudeCodeSettings(credentials="file")]
     assert message.splitlines() == [
         "Claude Code credential storage: File (0600). "
-        f"Not signed in (sign-in would be kept in the file {ClaudeCodeTokenStore().path}). Run /claude_code login.",
+        f"Not signed in (sign-in would be kept in the file {ClaudeCodeTokenStore().path}). Run /login claude.",
         "Signed in to Claude Code. Choose a model in /add_model > claude-code, or run /model claude-code:claude-opus-5-5.",
     ]
     assert urls == [URL]
