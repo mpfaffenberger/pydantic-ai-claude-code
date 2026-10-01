@@ -32,7 +32,7 @@ class ClaudeCodeSignInExpiredError(UserError):
         """`reason` is why the refresh failed, as the token endpoint put it."""
         super().__init__(
             f"Your Claude Code sign-in has expired or was revoked; sign in again. ({reason}) "
-            "In CLAI2 run /claude_code login; from Python, `await pydantic_ai_claude_code.login()` "
+            "In CLAI2 run /login claude (or /claude_code login); from Python, `await pydantic_ai_claude_code.login()` "
             "or `python -m pydantic_ai_claude_code login`."
         )
 

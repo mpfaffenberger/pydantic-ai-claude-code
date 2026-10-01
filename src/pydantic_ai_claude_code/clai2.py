@@ -2,9 +2,9 @@
 
 Install it by copying this package's folder into CLAI2's plugins folder as `claude_code/`; CLAI2 loads it at
 startup through the package's `activate`. Everything it imports already ships with CLAI2, and it uses only
-relative imports, so the copy runs on its own. `/claude_code` (or `C` in `/plugins`) opens the settings menu:
-sign in through the browser, sign out, and choose where the sign-in is kept. Then pick a model in
-`/add_model` > `claude-code`.
+relative imports, so the copy runs on its own. `/login claude` signs in through the browser, and `/claude_code`
+(or `C` in `/plugins`) opens the settings menu: sign in, sign out, and choose where the sign-in is kept. Then
+pick a model in `/add_model` > `claude-code`.
 
 The sign-in is an OAuth token pair, not an API key, so it does not go in `/keys`. It is kept where this
 package keeps it outside CLAI2 (the OS keyring by default), so one sign-in serves CLAI2 and your own agents.
@@ -35,10 +35,12 @@ PREFIX = "claude-code"
 COMMAND = "claude_code"
 """CLAI2 command names are Python identifiers, so the command cannot share the prefix's hyphen."""
 
+LOGIN = "claude"
+"""`/login claude` signs in, on a CLAI2 with `host.login`."""
+
 SIGNED_IN = "signed in"
 SIGNED_OUT = "not signed in"
 _HELP = f"Usage: /{COMMAND} (settings menu), /{COMMAND} login, /{COMMAND} logout, or /{COMMAND} status"
-_SIGN_IN_FIRST = f"Sign in to Claude Code first: /{COMMAND} login, or /plugins configure {COMMAND}."
 
 
 class ClaudeCodeSettings(BaseModel):
@@ -62,9 +64,16 @@ class ClaudeCodeConfig:
 
     title = "Claude Code settings"
 
-    def __init__(self, settings: ClaudeCodeSettings, save: Callable[[ClaudeCodeSettings], None]) -> None:
-        """`save` persists new settings, as `host.save_settings` does."""
+    def __init__(
+        self,
+        settings: ClaudeCodeSettings,
+        save: Callable[[ClaudeCodeSettings], None],
+        *,
+        sign_in_command: str = f"/{COMMAND} login",
+    ) -> None:
+        """`save` persists new settings, as `host.save_settings` does; messages point at `sign_in_command`."""
         self.settings = settings
+        self.sign_in_command = sign_in_command
         self._save = save
 
     def store(self) -> TokenStore:
@@ -135,12 +144,13 @@ class Providers:
         """Start empty; a provider is built on the first run."""
         self._cached: dict[Backend, ClaudeCodeProvider] = {}
 
-    def model(self, name: str, backend: Backend) -> ClaudeCodeModel:
+    def model(self, name: str, source: ClaudeCodeConfig) -> ClaudeCodeModel:
         """Build `name` on the stored sign-in, raising `UserError` with setup steps when there is none."""
+        backend = source.settings.credentials
         store = token_store(backend)
         credentials = store.load()
         if credentials is None:
-            raise UserError(_SIGN_IN_FIRST)
+            raise UserError(f"Sign in to Claude Code first: {source.sign_in_command}, or /plugins configure {COMMAND}.")
         provider = self._cached.get(backend)
         if provider is None or provider.credentials != credentials:
             provider = self._cached[backend] = ClaudeCodeProvider(credentials, store=store)
@@ -152,7 +162,7 @@ def status(source: ClaudeCodeConfig) -> str:
     store = source.store()
     where = f"the file {store.path}" if isinstance(store, ClaudeCodeTokenStore) else "the OS keyring"
     if store.load() is None:
-        return f"Not signed in (sign-in would be kept in {where}). Run /{COMMAND} login."
+        return f"Not signed in (sign-in would be kept in {where}). Run {source.sign_in_command}."
     return f"Signed in to Claude Code; tokens are kept in {where}."
 
 
@@ -183,15 +193,21 @@ async def configure(source: ClaudeCodeConfig, show_url: Callable[[str], None], r
 
 
 def activate(host: PluginHost[DepsT]) -> None:
-    """Register `claude-code:` models, the settings menu, and `/claude_code`."""
+    """Register `claude-code:` models, `/login claude` where CLAI2 supports it, the settings menu, and `/claude_code`."""
     if not hasattr(host, "model_provider"):
         raise RuntimeError(
-            "This pydantic-clai2 cannot run plugin models. Upgrade to a release with PluginHost.model_provider "
-            "(https://github.com/pydantic/pydantic-ai/pull/9468)."
+            "This pydantic-clai2 cannot run plugin models. Upgrade to a release after 0.52.0, or until one is "
+            "out, run `uv run clai2` from a checkout of https://github.com/pydantic/pydantic-ai main."
         )
-    source = ClaudeCodeConfig(host.settings(ClaudeCodeSettings), host.save_settings)
+    # `host.login` (pydantic/pydantic-ai#9485) came after `model_provider`; older hosts keep `/claude_code login`.
+    has_login = hasattr(host, "login")
+    source = ClaudeCodeConfig(
+        host.settings(ClaudeCodeSettings),
+        host.save_settings,
+        sign_in_command=f"/login {LOGIN}" if has_login else f"/{COMMAND} login",
+    )
     providers = Providers()
-    host.model_provider(PREFIX, lambda name: providers.model(name, source.settings.credentials), models=config.MODELS)
+    host.model_provider(PREFIX, lambda name: providers.model(name, source), models=config.MODELS)
 
     def show_url(url: str) -> None:
         host.console.print(
@@ -199,6 +215,9 @@ def activate(host: PluginHost[DepsT]) -> None:
             markup=False,
             soft_wrap=True,
         )
+
+    if has_login:
+        host.login(LOGIN, lambda: sign_in(source, show_url))
 
     @host.configure
     async def settings_menu() -> str:

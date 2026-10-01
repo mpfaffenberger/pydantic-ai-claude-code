@@ -1225,8 +1225,8 @@ email = [
 
 [[package]]
 name = "pydantic-ai-harness"
-version = "0.52.1.dev13+8d714fc7"
-source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=src%2Fpydantic_ai_harness&rev=8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585" }
+version = "0.52.1.dev44+9f1d49ed"
+source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=src%2Fpydantic_ai_harness&rev=9f1d49ed8e8a4c1134b97326791db4cc076fc52f#9f1d49ed8e8a4c1134b97326791db4cc076fc52f" }
 dependencies = [
     { name = "genai-prices" },
     { name = "httpx" },
@@ -1241,8 +1241,8 @@ coder = [
 
 [[package]]
 name = "pydantic-ai-slim"
-version = "2.52.1.dev13+8d714fc7"
-source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=pydantic_ai_slim&rev=8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585" }
+version = "2.52.1.dev44+9f1d49ed"
+source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=pydantic_ai_slim&rev=9f1d49ed8e8a4c1134b97326791db4cc076fc52f#9f1d49ed8e8a4c1134b97326791db4cc076fc52f" }
 dependencies = [
     { name = "anyio" },
     { name = "genai-prices" },
@@ -1268,9 +1268,10 @@ openai = [
 
 [[package]]
 name = "pydantic-clai2"
-version = "0.52.1.dev13+8d714fc7"
-source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=src%2Fpydantic_clai2&rev=8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585" }
+version = "0.52.1.dev44+9f1d49ed"
+source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=src%2Fpydantic_clai2&rev=9f1d49ed8e8a4c1134b97326791db4cc076fc52f#9f1d49ed8e8a4c1134b97326791db4cc076fc52f" }
 dependencies = [
+    { name = "cryptography" },
     { name = "genai-prices" },
     { name = "keyring" },
     { name = "logfire" },
@@ -1307,8 +1308,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "keyring", specifier = ">=23,<26" },
-    { name = "pydantic-ai-slim", extras = ["anthropic"], git = "https://github.com/pydantic/pydantic-ai?subdirectory=pydantic_ai_slim&rev=8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585" },
-    { name = "pydantic-clai2", marker = "extra == 'clai2'", git = "https://github.com/pydantic/pydantic-ai?subdirectory=src%2Fpydantic_clai2&rev=8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585" },
+    { name = "pydantic-ai-slim", extras = ["anthropic"], git = "https://github.com/pydantic/pydantic-ai?subdirectory=pydantic_ai_slim&rev=9f1d49ed8e8a4c1134b97326791db4cc076fc52f" },
+    { name = "pydantic-clai2", marker = "extra == 'clai2'", git = "https://github.com/pydantic/pydantic-ai?subdirectory=src%2Fpydantic_clai2&rev=9f1d49ed8e8a4c1134b97326791db4cc076fc52f" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.400" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.4" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.1" },
@@ -1420,8 +1421,8 @@ wheels = [
 
 [[package]]
 name = "pydantic-graph"
-version = "2.52.1.dev13+8d714fc7"
-source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=pydantic_graph&rev=8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585" }
+version = "2.52.1.dev44+9f1d49ed"
+source = { git = "https://github.com/pydantic/pydantic-ai?subdirectory=pydantic_graph&rev=9f1d49ed8e8a4c1134b97326791db4cc076fc52f#9f1d49ed8e8a4c1134b97326791db4cc076fc52f" }
 dependencies = [
     { name = "anyio" },
     { name = "logfire-api" },
@@ -1987,15 +1988,15 @@ wheels = [
 
 [[package]]
 name = "termflow-md"
-version = "0.9.3"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pygments" },
     { name = "wcwidth" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/83/72eb9e56a2609e0f9832eef8fef696ee94b5cf73fb1f164a7d82b6c26d4b/termflow_md-0.9.3.tar.gz", hash = "sha256:1cabf9ad3b066f2eb848fad3dcdadaf32c8e8bcc46adec60fc1ac2eb65f0ea20", size = 168629, upload-time = "2026-09-24T16:36:46.75Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/45/3d38b72453163c005e0c29c53875d81243b4339a27dbab4c4f67ff835da6/termflow_md-0.11.0.tar.gz", hash = "sha256:25706c43d80c9ddb1cad971a559f834abe89680f20887d4f5735e9968cef9e5a", size = 182364, upload-time = "2026-09-30T15:58:28.403Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/73/93/d6b95a69eece72a79c3bd92e28cc48d6c7493b9d720ff244ddc9885681ba/termflow_md-0.9.3-py3-none-any.whl", hash = "sha256:569f1ac99d466d1ddd91ec057139965864ffb678da6d0f9da30ee4a458c9f6fb", size = 95796, upload-time = "2026-09-24T16:36:45.369Z" },
+    { url = "https://files.pythonhosted.org/packages/66/bd/0b0b500fd09318dc35b2dfe2ca4405de6f6ba91f969736ba7eaa83b18562/termflow_md-0.11.0-py3-none-any.whl", hash = "sha256:05661df6235c73de34540d11faf6bf06bd7470496621a9cb84de40bf31e48767", size = 105318, upload-time = "2026-09-30T15:58:27.154Z" },
 ]
 
 [[package]]

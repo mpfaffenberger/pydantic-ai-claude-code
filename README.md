@@ -30,12 +30,23 @@ subscription serves, such as `claude-opus-4-8`, works too; it just isn't listed.
 The plugin adds `claude-code:MODEL` models to CLAI2, next to its own providers,
 so the stock agent, Coder, and your other plugins all keep working.
 
-### Install: drop the folder in
+### Install
 
-The plugin is the `src/pydantic_ai_claude_code` folder, as is. Copy it into
-CLAI2's plugins folder under the name `claude_code`. Nothing to `pip install`:
-everything it imports (`pydantic-ai` with Anthropic support, `httpx2`,
-`keyring`) already ships with CLAI2.
+One line installs the plugin, and running it again updates it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/pydantic-ai-claude-code/main/install.sh | sh
+```
+
+To pin a release, pass its tag: `... | sh -s -- v0.4.0`. The script downloads
+this repo and copies the `src/pydantic_ai_claude_code` folder into CLAI2's
+plugins folder as `claude_code`, replacing any older copy. Nothing to
+`pip install`: everything the plugin imports (`pydantic-ai` with Anthropic
+support, `httpx2`, `keyring`) already ships with CLAI2.
+
+The plugins folder is `$XDG_CONFIG_HOME/pydantic-clai2/plugins/`, which is
+`~/.config/pydantic-clai2/plugins/` by default on macOS and Linux: the folder
+next to CLAI2's `config.db`. To install by hand, copy the folder there yourself:
 
 ```bash
 git clone --depth 1 https://github.com/mpfaffenberger/pydantic-ai-claude-code /tmp/claude-code-plugin
@@ -43,9 +54,7 @@ mkdir -p ~/.config/pydantic-clai2/plugins
 cp -R /tmp/claude-code-plugin/src/pydantic_ai_claude_code ~/.config/pydantic-clai2/plugins/claude_code
 ```
 
-The plugins folder is `$XDG_CONFIG_HOME/pydantic-clai2/plugins/`, which is
-`~/.config/pydantic-clai2/plugins/` by default on macOS and Linux: the folder
-next to CLAI2's `config.db`. To update, delete `claude_code` and copy again. To hack on the plugin, symlink the folder instead of copying it:
+To hack on the plugin, symlink the folder instead of copying it:
 `ln -s "$PWD/src/pydantic_ai_claude_code" ~/.config/pydantic-clai2/plugins/claude_code`.
 
 Dropped-in plugins load when CLAI2 starts. Inside CLAI2, `/plugins` lists it as
@@ -53,17 +62,18 @@ Dropped-in plugins load when CLAI2 starts. Inside CLAI2, `/plugins` lists it as
 shows only plugins added by name, so it won't appear there.)
 
 **CLAI2 version:** the plugin needs `PluginHost.model_provider`
-([pydantic/pydantic-ai#9468](https://github.com/pydantic/pydantic-ai/pull/9468)),
-which the first `pydantic-clai2` release after 0.52.0 includes. On an older
-CLAI2 the plugin fails to load with `This pydantic-clai2 cannot run plugin
-models`. Until that release, run CLAI2 from that pull request's commit:
+([pydantic/pydantic-ai#9468](https://github.com/pydantic/pydantic-ai/pull/9468),
+merged), which the next `pydantic-clai2` release after 0.52.0 includes. On an
+older CLAI2 the plugin fails to load with `This pydantic-clai2 cannot run plugin
+models`. `/login claude` needs `PluginHost.login`
+([#9485](https://github.com/pydantic/pydantic-ai/pull/9485), also merged); on a
+CLAI2 without it, sign in with `/claude_code login` instead. Until a release has
+both, run CLAI2 from pydantic-ai's `main`:
 
 ```bash
-uvx --from "git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=src/pydantic_clai2" \
-  --with "pydantic-ai-slim[anthropic,mcp,openai] @ git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=pydantic_ai_slim" \
-  --with "pydantic-ai-harness[coder] @ git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=src/pydantic_ai_harness" \
-  --with "pydantic-graph @ git+https://github.com/pydantic/pydantic-ai@8d714fc7b6cbf1e47c3364fa8b8cf28a8d350585#subdirectory=pydantic_graph" \
-  clai2
+git clone https://github.com/pydantic/pydantic-ai
+cd pydantic-ai
+uv run clai2
 ```
 
 Or install it as a package instead, into CLAI2's environment, and point CLAI2
@@ -72,8 +82,9 @@ at it: `uv tool install pydantic-clai2 --with pydantic-claude-code`, then
 
 ### Sign in
 
-Run `/claude_code login`. Your browser opens Claude's sign-in page, and CLAI2
-prints the URL in case it doesn't. Or open the settings menu with `/claude_code`
+Run `/login claude`. Your browser opens Claude's sign-in page, and CLAI2
+prints the URL in case it doesn't. (`/claude_code login` does the same, and is
+the way to sign in on a CLAI2 without `/login claude`.) Or open the settings menu with `/claude_code`
 (or `C` on the plugin in `/plugins`), choose **Sign-in**, and press Enter.
 
 ### Pick a model
@@ -118,9 +129,9 @@ expire. Switching storage does not move an existing sign-in, so sign in again
 after switching.
 
 If a run says `Sign in to Claude Code first` or `Your Claude Code sign-in has
-expired`, run `/claude_code login`. If the
+expired`, run `/login claude`. If the
 plugin fails to load with `This pydantic-clai2 cannot run plugin models`,
-upgrade CLAI2 as described under [Install](#install-drop-the-folder-in).
+upgrade CLAI2 as described under [Install](#install).
 
 ## Use it from Python
 
