@@ -1,8 +1,8 @@
 """Authorization-code PKCE flow for Claude Code credentials.
 
 The browser flow hosts a short-lived localhost callback server, the same shape as
-the Codex provider's `_REDIRECT_URI`. Both the `claude://` pasteback scheme and a
-plain localhost redirect are supported.
+the Codex provider's `_REDIRECT_URI`. When the browser cannot reach it (SSH, a remote
+box), the user can paste the address the browser ended on instead: see `read_pasteback`.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import hashlib
 import secrets
 import threading
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlencode
 
@@ -124,20 +124,20 @@ def _token_headers() -> dict[str, str]:
 
 
 def parse_pasteback(raw: str) -> tuple[str, str] | None:
-    """Parse a `claude://oauth/callback?...` paste back into `(code, state)`.
+    """Parse what the user pasted into `(code, state)`; `None` when it holds no authorization code.
 
-    Returns `None` when the input isn't a pasteback URL.
+    Accepts the address the browser ended on (`http://localhost:PORT/callback?code=...&state=...`, or
+    `claude://...`), just its query string, or the `code#state` form Anthropic's code page shows.
     """
-    if not raw.startswith(config.PASTEBACK_SCHEMES):
+    text = raw.strip()
+    if "?" in text or text.startswith("code="):
+        params = parse_qs(text.partition("?")[2] if "?" in text else text)
+        code, state = params.get("code", [""])[0], params.get("state", [""])[0]
+    elif "#" in text:
+        code, _, state = text.partition("#")
+    else:
         return None
-    try:
-        query = raw.partition("?")[2]
-        params = parse_qs(query)
-    except ValueError:
-        return None
-    code = params.get("code", [""])[0]
-    state = params.get("state", [""])[0]
-    if not code:
+    if not code or any(char.isspace() for char in code + state):
         return None
     return code, state
 
@@ -182,7 +182,10 @@ def _print_url(url: str) -> None:
 
 
 async def login(
-    *, store: TokenStore | None = None, on_url: Callable[[str], None] = _print_url
+    *,
+    store: TokenStore | None = None,
+    on_url: Callable[[str], None] = _print_url,
+    read_pasteback: Callable[[], Awaitable[str | None]] | None = None,
 ) -> ClaudeCodeCredentials:
     """Run the full OAuth flow and persist the minted credentials.
 
@@ -191,6 +194,10 @@ async def login(
     Args:
         store: The token store to write to. Defaults to the standard store.
         on_url: Shows the authorization URL, in case the browser does not open. Prints it by default.
+        read_pasteback: Reads the address the browser ended on, for a browser that cannot reach this
+            machine's localhost callback (SSH, a remote box). Returns `None` to cancel. Runs alongside
+            the callback, which cancels it when the browser gets through first. Without it the
+            callback is the only way in, and it times out.
 
     Returns:
         The credentials that were persisted.
@@ -198,6 +205,9 @@ async def login(
     if store is None:
         store = default_store()
     server = start_login_callback_server()
+    timeout = None if read_pasteback is not None else config.CALLBACK_TIMEOUT
+    callback = asyncio.ensure_future(asyncio.to_thread(server.received.wait, timeout))
+    paste = asyncio.ensure_future(read_pasteback()) if read_pasteback is not None else None
     try:
         redirect_uri = f"{config.REDIRECT_HOST}:{server.server_address[1]}/{config.REDIRECT_PATH}"
         flow = ClaudeCodeOAuthFlow(redirect_uri=redirect_uri)
@@ -206,9 +216,13 @@ async def login(
         # Launch the browser off the event path: on some macOS setups `webbrowser.open`
         # hangs until the UI settles, which would starve the callback wait below.
         threading.Thread(target=_open_browser, args=(url,), daemon=True).start()
-        if not await asyncio.to_thread(server.received.wait, config.CALLBACK_TIMEOUT):
+        await asyncio.wait({callback} if paste is None else {callback, paste}, return_when=asyncio.FIRST_COMPLETED)
+        if server.query is not None:
+            code, state = _parse_callback_query(server.query)
+        elif paste is not None and paste.done():
+            code, state = _pasted(paste.result())
+        else:
             raise UserError("Claude Code OAuth callback timed out.")
-        code, state = _parse_callback_query(server.query)
         if state and state != flow.state:
             raise UserError("Claude Code OAuth state mismatch; the redirect may be a replay.")
         if not code:
@@ -217,10 +231,22 @@ async def login(
     finally:
         server.shutdown()
         server.server_close()
-        # Release the waiting thread at once when the login was cancelled.
+        # Release the waiting thread at once when the login was cancelled or a paste won.
         server.received.set()
+        if paste is not None and not paste.done():
+            paste.cancel()
+        await asyncio.gather(callback, *(() if paste is None else (paste,)), return_exceptions=True)
     store.save(credentials)
     return credentials
+
+
+def _pasted(text: str | None) -> tuple[str, str]:
+    if text is None:
+        raise UserError("Claude Code sign-in cancelled.")
+    parsed = parse_pasteback(text)
+    if parsed is None:
+        raise UserError("That paste has no authorization code; copy the whole address your browser ended on.")
+    return parsed
 
 
 def _open_browser(url: str) -> None:

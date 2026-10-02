@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install or update the Claude Code plugin for CLAI2, at the latest release (pass a tag such as v0.6.1, or main):
+# Install or update the Claude Code plugin for CLAI2, at the latest release (pass a tag such as v0.6.2, or main):
 #   curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/pydantic-ai-claude-code/main/install.sh | sh
 set -eu
 
@@ -7,7 +7,7 @@ ref="${1:-}"
 if [ -z "$ref" ]; then
     version=$(curl -fsSL https://pypi.org/pypi/pydantic-claude-code/json | grep -o '"version": *"[^"]*"' | head -n 1 | cut -d '"' -f 4)
     if [ -z "$version" ]; then
-        echo "Could not look up the latest release on PyPI. Pass a tag (sh -s -- v0.6.1) or main." >&2
+        echo "Could not look up the latest release on PyPI. Pass a tag (sh -s -- v0.6.2) or main." >&2
         exit 1
     fi
     ref="v$version"

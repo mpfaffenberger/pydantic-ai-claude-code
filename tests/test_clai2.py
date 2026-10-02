@@ -36,6 +36,7 @@ from pydantic_ai_claude_code.clai2 import (
     ClaudeCodePlugin,
     ClaudeCodeSettings,
     configure,
+    read_pasted_url,
     token_store,
 )
 from pydantic_ai_claude_code.credentials import ClaudeCodeCredentials
@@ -71,13 +72,17 @@ async def run(loaded: LoadedPlugin[None], *args: str) -> str:
     return await cast(Awaitable[str], result)
 
 
-async def fake_login(*, store: TokenStore, on_url: Callable[[str], None]) -> ClaudeCodeCredentials:
+async def fake_login(
+    *, store: TokenStore, on_url: Callable[[str], None], read_pasteback: Callable[[], Awaitable[str | None]]
+) -> ClaudeCodeCredentials:
     on_url(URL)
     store.save(CREDS)
     return CREDS
 
 
-async def failing_login(*, store: TokenStore, on_url: Callable[[str], None]) -> ClaudeCodeCredentials:
+async def failing_login(
+    *, store: TokenStore, on_url: Callable[[str], None], read_pasteback: Callable[[], Awaitable[str | None]]
+) -> ClaudeCodeCredentials:
     raise UserError("Claude Code OAuth callback timed out.")
 
 
@@ -287,7 +292,7 @@ def test_rows_show_state_validate_and_reset() -> None:
 
 PACKAGE = Path(pydantic_ai_claude_code.__file__).parent
 # What CLAI2 itself installs, so a copied folder can import it: see pydantic-clai2's dependencies.
-CLAI2_PROVIDES = {"anthropic", "httpx2", "keyring", "pydantic", "pydantic_ai", "pydantic_clai2"}
+CLAI2_PROVIDES = {"anthropic", "httpx2", "keyring", "pydantic", "pydantic_ai", "pydantic_clai2", "termflow"}
 
 
 @pytest.mark.parametrize("module", sorted(PACKAGE.glob("*.py")), ids=lambda path: path.name)
@@ -345,3 +350,47 @@ async def test_clai2_runs_the_package_folder_as_a_drop_in(
     }
     assert drop_in in loaded, "the turn ran on the copied folder"
     assert "You are Claude Code" in str(messages_stub.received.get("system"))
+
+
+PASTED = "http://localhost:8765/callback?code=abc&state=xyz"
+
+
+def typing(*keys: str) -> Callable[[], str]:
+    remaining = iter(keys)
+    return lambda: next(remaining)
+
+
+def test_a_pasted_address_is_counted_not_echoed_and_returned_on_enter() -> None:
+    shown = io.StringIO()
+    assert read_pasted_url(typing("", *PASTED, "tab", "enter"), shown) == PASTED
+    assert "code=abc" not in shown.getvalue(), "the authorization code never reaches the screen"
+    assert f"[{len(PASTED)} characters]" in shown.getvalue()
+
+
+def test_a_paste_without_a_code_is_refused_and_can_be_fixed() -> None:
+    shown = io.StringIO()
+    keys = typing(*"nope", "enter", "ctrl-u", *"x", "backspace", *PASTED, "enter")
+    assert read_pasted_url(keys, shown) == PASTED
+    assert "no authorization code in that" in shown.getvalue()
+
+
+@pytest.mark.parametrize("key", ["escape", "ctrl-c"])
+def test_escape_or_a_winning_callback_ends_the_read(key: str) -> None:
+    assert read_pasted_url(typing(*"abc", key), io.StringIO()) is None
+
+
+async def test_sign_in_offers_the_paste_reader_to_login(monkeypatch: pytest.MonkeyPatch) -> None:
+    offered: list[str | None] = []
+
+    async def pasting_login(
+        *, store: TokenStore, on_url: Callable[[str], None], read_pasteback: Callable[[], Awaitable[str | None]]
+    ) -> ClaudeCodeCredentials:
+        offered.append(await read_pasteback())
+        store.save(CREDS)
+        return CREDS
+
+    monkeypatch.setattr(clai2, "login", pasting_login)
+    monkeypatch.setattr(clai2, "read_pasted_url", lambda: PASTED)
+    source = ClaudeCodeConfig(ClaudeCodeSettings(), lambda settings: None)
+    assert (await clai2.sign_in(source, print)).startswith("Signed in to Claude Code.")
+    assert offered == [PASTED]
