@@ -139,7 +139,78 @@ async def test_login_rejects_a_mismatched_state(token_stub, monkeypatch) -> None
     assert store.saved is None
 
 
-def test_parse_pasteback() -> None:
-    assert parse_pasteback("claude://oauth/callback?code=abc&state=xyz") == ("abc", "xyz")
-    assert parse_pasteback("https://example.com/callback?code=nope") is None
-    assert parse_pasteback("claude://oauth/callback") is None  # missing code
+@pytest.mark.parametrize(
+    ("pasted", "parsed"),
+    [
+        ("http://localhost:8765/callback?code=abc&state=xyz", ("abc", "xyz")),
+        ("  claude://oauth/callback?code=abc&state=xyz\n", ("abc", "xyz")),
+        ("code=abc&state=xyz", ("abc", "xyz")),
+        ("abc#xyz", ("abc", "xyz")),
+        ("http://localhost:8765/callback?state=xyz", None),
+        ("claude://oauth/callback", None),
+        ("", None),
+        ("two words", None),
+    ],
+)
+def test_parse_pasteback(pasted: str, parsed: tuple[str, str] | None) -> None:
+    assert parse_pasteback(pasted) == parsed
+
+
+def _paste_from(url: str, *, state: str | None = None) -> str:
+    """What a browser on another machine ends on: the localhost redirect, which it could not load."""
+    query = parse_qs(urlsplit(url).query)
+    return f"{query['redirect_uri'][0]}?code=pasted-code&state={state or query['state'][0]}"
+
+
+async def test_login_takes_a_pasted_address_when_the_callback_never_comes(token_stub, monkeypatch) -> None:
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    shown: list[str] = []
+
+    async def paste() -> str:
+        await asyncio.sleep(0)
+        return _paste_from(shown[0])
+
+    store = _MemoryStore()
+    credentials = await flow.login(store=store, on_url=shown.append, read_pasteback=paste)
+    assert store.saved == credentials
+    assert token_stub.last_body["code"] == "pasted-code"
+    assert token_stub.last_body["redirect_uri"] == parse_qs(urlsplit(shown[0]).query)["redirect_uri"][0]
+
+
+async def test_login_cancels_the_paste_read_when_the_browser_gets_through(token_stub, monkeypatch) -> None:
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    cancelled = asyncio.Event()
+
+    async def wait_for_paste() -> str | None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return None  # pragma: no cover
+
+    await flow.login(store=_MemoryStore(), on_url=_visit_redirect_later, read_pasteback=wait_for_paste)
+    assert cancelled.is_set()
+    assert token_stub.last_body["code"] == "the-code"
+
+
+@pytest.mark.parametrize(
+    ("pasted", "error"),
+    [
+        (None, "sign-in cancelled"),
+        ("not a url", "no authorization code"),
+        ("forged", "state mismatch"),
+    ],
+)
+async def test_login_rejects_a_cancelled_empty_or_forged_paste(token_stub, monkeypatch, pasted, error) -> None:
+    monkeypatch.setattr(flow, "_open_browser", lambda url: None)
+    shown: list[str] = []
+
+    async def paste() -> str | None:
+        await asyncio.sleep(0)
+        return _paste_from(shown[0], state="forged") if pasted == "forged" else pasted
+
+    store = _MemoryStore()
+    with pytest.raises(UserError, match=error):
+        await flow.login(store=store, on_url=shown.append, read_pasteback=paste)
+    assert store.saved is None

@@ -14,17 +14,20 @@ Plugin settings, which are plaintext SQLite, hold only the storage choice.
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Callable, Sequence
-from typing import get_args
+from typing import IO, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic_ai.exceptions import UserError
 from pydantic_clai2.commands import Command
+from termflow.tui.terminal import raw_mode
 from pydantic_clai2.plugins import ModelProvider, Plugin, PluginHost, PluginLogin, SessionEnd, SessionStart, TurnEnd
+from pydantic_clai2.ui.menus.menu_worker import menu_key, run_worker
 from pydantic_clai2.ui.menus.field_menu import TERMINAL, FieldMenu, FieldRow, Runners, first_error, run_flow_async
 
 from . import __version__, config, updates
-from .flow import login
+from .flow import login, parse_pasteback
 from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
 from .storage import Backend, ClaudeCodeTokenStore, TokenStore, default_store
@@ -164,10 +167,53 @@ def status(source: ClaudeCodeConfig) -> str:
 
 
 async def sign_in(source: ClaudeCodeConfig, show_url: Callable[[str], None]) -> str:
-    """Sign in through the browser and save the tokens to the chosen store."""
-    await login(store=source.store(), on_url=show_url)
+    """Sign in through the browser, or a pasted redirect address, and save the tokens to the chosen store."""
+    await login(store=source.store(), on_url=show_url, read_pasteback=lambda: run_worker(read_pasted_url))
     first = config.MODELS[0]
     return f"Signed in to Claude Code. Choose a model in /add_model > {PREFIX}, or run /model {PREFIX}:{first}."
+
+
+PASTE_PROMPT = "Or paste the address your browser ended on, then Enter (Esc cancels): "
+
+
+def read_pasted_url(keys: Callable[[], str] = menu_key, output: IO[str] = sys.stdout) -> str | None:
+    """Read a pasted redirect address on one line, under the printed sign-in URL; `None` on Esc.
+
+    The address carries the authorization code, so it is counted, not echoed: a long URL would also wrap
+    and break the one-line redraw. `keys` is `run_worker`'s `menu_key`, which turns into `ctrl-c` when the
+    browser's callback wins and `login` cancels this read.
+    """
+    chars: list[str] = []
+    note = ""
+
+    def draw() -> None:
+        shown = note or (f"[{len(chars)} characters]" if chars else "")
+        output.write(f"\r\x1b[K{PASTE_PROMPT}{shown}")
+        output.flush()
+
+    with raw_mode():
+        draw()
+        while True:
+            key = keys()
+            if key in ("escape", "ctrl-c"):
+                output.write("\r\n")
+                return None
+            if key == "enter":
+                if parse_pasteback("".join(chars)) is not None:
+                    output.write("\r\n")
+                    return "".join(chars)
+                note = "no authorization code in that; paste the whole address"
+            elif key == "backspace":
+                chars[-1:] = []
+                note = ""
+            elif key == "ctrl-u":
+                chars, note = [], ""
+            elif len(key) == 1 and key.isprintable():
+                chars.append(key)
+                note = ""
+            else:
+                continue
+            draw()
 
 
 def sign_out(source: ClaudeCodeConfig) -> str:
@@ -207,7 +253,8 @@ class ClaudeCodePlugin(Plugin[ClaudeCodeSettings]):
 
     def _show_url(self, url: str) -> None:
         self.host.console.print(
-            f"Opening your browser to sign in to Claude Code. If it does not open, visit:\n{url}",
+            "Opening your browser to sign in to Claude Code. If it does not open, or this machine's browser "
+            f"cannot reach it (SSH, a remote box), open this anywhere and sign in:\n{url}",
             markup=False,
             soft_wrap=True,
         )

@@ -42,7 +42,6 @@ REDIRECT_HOST = "http://localhost"
 REDIRECT_PATH = "callback"
 CALLBACK_PORT_RANGE = (8765, 8795)
 CALLBACK_TIMEOUT = 180
-PASTEBACK_SCHEMES = ("claude://",)
 
 # Request headers that must accompany Claude Code subscription tokens. `anthropic-beta` is
 # appended (never replaced) by the auth layer so feature betas set by pydantic-ai survive.

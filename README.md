@@ -38,7 +38,7 @@ One line installs the latest release of the plugin, and running it again updates
 curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/pydantic-ai-claude-code/main/install.sh | sh
 ```
 
-To pin a release, pass its tag (`... | sh -s -- v0.6.1`), or pass `main` for
+To pin a release, pass its tag (`... | sh -s -- v0.6.2`), or pass `main` for
 unreleased changes. The script downloads that version of this repo and copies the `src/pydantic_ai_claude_code` folder into CLAI2's
 plugins folder as `claude_code`, replacing any older copy. Nothing to
 `pip install`: everything the plugin imports (`pydantic-ai` with Anthropic
@@ -87,7 +87,11 @@ at it: `uv tool install pydantic-clai2 --with pydantic-claude-code`, then
 ### Sign in
 
 Run `/login claude`. Your browser opens Claude's sign-in page, and CLAI2
-prints the URL in case it doesn't. Or open the settings menu with `/claude_code`
+prints the URL in case it doesn't. On a machine whose browser can't reach CLAI2
+(over SSH, or a remote box), open that URL on any machine and sign in. The
+browser then ends on a `http://localhost:.../callback?code=...` page that fails
+to load; copy that whole address and paste it at CLAI2's prompt, then press
+Enter. CLAI2 counts the characters instead of echoing the code. Or open the settings menu with `/claude_code`
 (or `C` on the plugin in `/plugins`), choose **Sign-in**, and press Enter.
 
 ### Pick a model
@@ -279,7 +283,7 @@ uv run pytest
 
 To release, bump `version` in `pyproject.toml` and `__version__` in
 `src/pydantic_ai_claude_code/__init__.py` (a test checks they match), merge, and
-push a matching tag (`git tag v0.6.1 && git push origin v0.6.1`). The `Publish` workflow tests,
+push a matching tag (`git tag v0.6.2 && git push origin v0.6.2`). The `Publish` workflow tests,
 builds, and uploads it to PyPI with the `PYPI_API_TOKEN` repository secret.
 
 The tests never touch your real keychain or token file. They run against a
