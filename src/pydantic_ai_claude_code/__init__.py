@@ -26,7 +26,7 @@ from .model import ClaudeCodeModel
 from .provider import ClaudeCodeProvider
 from .storage import ClaudeCodeTokenStore, KeyringTokenStore, default_auth_path, default_store
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 """Matches `version` in pyproject.toml (a test checks), so a copied folder knows its release."""
 
 
