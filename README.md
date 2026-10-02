@@ -38,7 +38,7 @@ One line installs the latest release of the plugin, and running it again updates
 curl -fsSL https://raw.githubusercontent.com/mpfaffenberger/pydantic-ai-claude-code/main/install.sh | sh
 ```
 
-To pin a release, pass its tag (`... | sh -s -- v0.6.0`), or pass `main` for
+To pin a release, pass its tag (`... | sh -s -- v0.6.1`), or pass `main` for
 unreleased changes. The script downloads that version of this repo and copies the `src/pydantic_ai_claude_code` folder into CLAI2's
 plugins folder as `claude_code`, replacing any older copy. Nothing to
 `pip install`: everything the plugin imports (`pydantic-ai` with Anthropic
@@ -67,21 +67,22 @@ one-liner to update. Being offline is silent. Set `CLAUDE_CODE_NO_UPDATE_CHECK=1
 to turn the check off.
 
 **CLAI2 version:** the plugin is a class-based CLAI2 `Plugin`
-([pydantic/pydantic-ai#9493](https://github.com/pydantic/pydantic-ai/pull/9493),
-merged), so it needs a CLAI2 built from pydantic-ai `main` at or after that
-commit; no `pydantic-clai2` release has it yet (0.52.0 is the latest). Plugin
-0.5.0 was the last `activate(host)` plugin, for CLAI2 `main` before #9493. Until
-a release is out, run CLAI2 from pydantic-ai's `main`:
+([pydantic/pydantic-ai#9493](https://github.com/pydantic/pydantic-ai/pull/9493)),
+which needs `pydantic-clai2` 0.53.0 or later, on Python 3.10 to 3.14. Run it
+without installing anything:
 
 ```bash
-git clone https://github.com/pydantic/pydantic-ai
-cd pydantic-ai
-uv run clai2
+uvx --from pydantic-clai2 clai2
 ```
+
+(The PyPI package is `pydantic-clai2`; plain `uvx clai2` looks for a package
+named `clai2`, which does not exist.) Plugin 0.5.0 was the last `activate(host)`
+plugin, for CLAI2 `main` before #9493.
 
 Or install it as a package instead, into CLAI2's environment, and point CLAI2
 at it: `uv tool install pydantic-clai2 --with pydantic-claude-code`, then
 `/plugins add claude_code pydantic_ai_claude_code`.
+
 
 ### Sign in
 
@@ -278,7 +279,7 @@ uv run pytest
 
 To release, bump `version` in `pyproject.toml` and `__version__` in
 `src/pydantic_ai_claude_code/__init__.py` (a test checks they match), merge, and
-push a matching tag (`git tag v0.6.0 && git push origin v0.6.0`). The `Publish` workflow tests,
+push a matching tag (`git tag v0.6.1 && git push origin v0.6.1`). The `Publish` workflow tests,
 builds, and uploads it to PyPI with the `PYPI_API_TOKEN` repository secret.
 
 The tests never touch your real keychain or token file. They run against a

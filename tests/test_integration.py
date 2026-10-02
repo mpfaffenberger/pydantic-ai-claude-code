@@ -7,7 +7,7 @@ headers, message building, and response parsing.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 from pydantic_ai import Agent
@@ -49,7 +49,7 @@ async def test_expired_sign_in_is_reported_not_a_connection_error(
     monkeypatch.setattr(config, "TOKEN_URL", f"{messages_stub.url}/oauth/token")
     messages_stub.token_status = 400
     expired = ClaudeCodeCredentials(
-        access_token="old", refresh_token="revoked", expires_at=datetime(2020, 1, 1, tzinfo=UTC)
+        access_token="old", refresh_token="revoked", expires_at=datetime(2020, 1, 1, tzinfo=timezone.utc)
     )
     agent = Agent(ClaudeCodeModel("claude-haiku-4-5", provider=ClaudeCodeProvider(expired, base_url=messages_stub.url)))
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, SecretStr
 
@@ -59,7 +59,7 @@ class ClaudeCodeCredentials(BaseModel):
         expires_at = None
         if expires_in := root.get("expires_in"):
             if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool):
-                expires_at = datetime.fromtimestamp(time.time() + float(expires_in), tz=UTC)
+                expires_at = datetime.fromtimestamp(time.time() + float(expires_in), tz=timezone.utc)
         return cls(
             access_token=SecretStr(access_token),
             refresh_token=SecretStr(refresh_token),

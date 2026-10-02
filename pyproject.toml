@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pydantic-claude-code"
-version = "0.6.0"
+version = "0.6.1"
 description = "Use your Claude Code subscription from a Pydantic AI Agent or CLAI2, with full tool support"
 readme = "README.md"
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.10,<3.15"
 dependencies = [
     "keyring>=23,<26",
     "pydantic-ai-slim[anthropic]>=2.31.0,<3",
@@ -16,9 +16,11 @@ license = { text = "MIT" }
 authors = [{ name = "Michael Pfaffenberger" }]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -32,11 +34,11 @@ packages = ["src/pydantic_ai_claude_code"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py310"
 
 [tool.pyright]
 include = ["src"]
-pythonVersion = "3.11"
+pythonVersion = "3.10"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -45,9 +47,9 @@ addopts = "-q"
 
 [project.optional-dependencies]
 # Only for installing the plugin as a package; the usual install copies the package folder into CLAI2's
-# plugins folder. Either way it needs the class-based `Plugin` API, which 0.52.0 lacks:
+# plugins folder. Either way it needs the class-based `Plugin` API, first released in 0.53.0:
 # https://github.com/pydantic/pydantic-ai/pull/9493.
-clai2 = ["pydantic-clai2>0.52.0"]
+clai2 = ["pydantic-clai2>=0.53.0"]
 dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.23.1",
@@ -55,12 +57,3 @@ dev = [
     "pyright>=1.1.400",
 ]
 
-# Until a pydantic-clai2 release includes pydantic/pydantic-ai#9493 (class-based `Plugin`s, which also carry #9558's
-# `PluginLogin.models` and `ModelProvider.settings_from`), develop and test the plugin against #9493's merge commit on
-# main. CLAI2 pins Pydantic AI and the harness to its own build, so all four come from the same commit. Remove this
-# table once a release has it.
-[tool.uv.sources]
-pydantic-clai2 = { git = "https://github.com/pydantic/pydantic-ai", rev = "e4e0da04f0c698c5837cc7099711eebaff3f46c3", subdirectory = "src/pydantic_clai2" }
-pydantic-ai-harness = { git = "https://github.com/pydantic/pydantic-ai", rev = "e4e0da04f0c698c5837cc7099711eebaff3f46c3", subdirectory = "src/pydantic_ai_harness" }
-pydantic-ai-slim = { git = "https://github.com/pydantic/pydantic-ai", rev = "e4e0da04f0c698c5837cc7099711eebaff3f46c3", subdirectory = "pydantic_ai_slim" }
-pydantic-graph = { git = "https://github.com/pydantic/pydantic-ai", rev = "e4e0da04f0c698c5837cc7099711eebaff3f46c3", subdirectory = "pydantic_graph" }

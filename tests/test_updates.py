@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import tomllib
-from pathlib import Path
+from importlib.metadata import version
 
 import pytest
 
@@ -12,8 +11,7 @@ from pydantic_ai_claude_code import __version__, updates
 
 
 def test_the_folder_knows_its_release() -> None:
-    pyproject = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
-    assert __version__ == pyproject["project"]["version"]
+    assert __version__ == version("pydantic-claude-code"), "the installed project's version is pyproject.toml's"
 
 
 @pytest.mark.parametrize(
